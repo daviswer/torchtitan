@@ -38,6 +38,13 @@ fp8_linear = ""
 compile = false
 dataset = "c4"
 
+data_logical_shards=768
+bos_token=128000
+eos_token=128001
+datasets=dataset=c4
+dataset_path=/gpfs/lchu/c4_mini/llama3
+dataset_weights=1
+
 [checkpoint]
 enable_checkpoint = false
 folder = "checkpoint"
