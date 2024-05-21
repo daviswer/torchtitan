@@ -1176,7 +1176,7 @@ def build_fms_data_loader(cfg, rank, world_size):
     # Wrap above dataset in packing logic to form constant-length lines.
     data = Buffer_Dataset(
         data,
-        cfg.seq_len + 1,
+        cfg.training.seq_len + 1,
         pack_hard=True,
     )
     # Shuffle outputs in length 10k buffer. Consecutive lines appear 10k steps apart on average.
