@@ -46,7 +46,7 @@ dataset_path = "/gpfs/lchu/c4_mini/llama3"
 dataset_weights=1
 
 [checkpoint]
-enable_checkpoint = false
+enable_checkpoint = true
 folder = "checkpoint"
 interval_type = "steps"
 interval = 500
