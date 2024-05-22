@@ -1190,10 +1190,9 @@ def build_fms_data_loader(cfg, rank, world_size):
         ), "Dataloader checkpointing supports only step-based interval"
         data = Checkpoint_Dataset(
             data,
-            cfg.checkpoint.folder,
+            os.path.join(cfg.job.dump_folder, cfg.checkpoint.folder),
             cfg.checkpoint.interval,
             cfg.training.batch_size,
-            cfg.checkpoint.folder,
         )
     return torch.utils.data.DataLoader(
         data, num_workers=1, batch_size=cfg.training.batch_size
