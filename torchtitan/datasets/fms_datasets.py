@@ -56,7 +56,7 @@ def _get_latest(targdir, qualifier=lambda x: True):
                 for x in os.listdir(targdir)
                 if qualifier(os.path.join(targdir, x))
             ],
-            key=lambda path: int(path.split("/")[-1].split("_")[1]),
+            key=lambda path: int(path.split("/")[-1].split("-")[1]),
         )
         return os.path.join(targdir, latest)
     return None
@@ -321,7 +321,7 @@ class Checkpoint_Dataset(_Wrapper_Dataset):
                 self.ministep = 0
                 self.step += 1
                 if self.step % self.interval == 0:
-                    newpath = os.path.join(self.path, "step_" + str(self.step))
+                    newpath = os.path.join(self.path, "step-" + str(self.step))
                     self.save_to_path(newpath)
 
     def report(self, msg):
@@ -353,7 +353,7 @@ class Checkpoint_Dataset(_Wrapper_Dataset):
             )
             return
         # If item is a folder, get the step count
-        self.step = int(latest.split("_")[-1])
+        self.step = int(latest.split("-")[-1])
         # Proceed
         start = time.time()
         self.dataset.load_from_path(latest)
