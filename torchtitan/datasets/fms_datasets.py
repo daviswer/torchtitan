@@ -57,7 +57,6 @@ def _get_latest(targdir, qualifier=lambda x: True):
                 if qualifier(os.path.join(targdir, x))
             ],
             key=lambda path: int(path.split("/")[-1].split("_")[1]),
-            # TODO: reconcile autockp naming scheme with torchtitan's
         )
         return os.path.join(targdir, latest)
     return None
@@ -306,11 +305,8 @@ class Checkpoint_Dataset(_Wrapper_Dataset):
         super().__init__(dataset)
         self.interval = interval
         self.spb = steps_per_batch
-        load_path = os.path.join(load_path, "checkpoints")
         if len(save_path) == 0:
             save_path = load_path
-        else:
-            save_path = os.path.join(save_path, "checkpoints")
         self.path = save_path
         self.step = 0
         self.ministep = 0
@@ -325,7 +321,7 @@ class Checkpoint_Dataset(_Wrapper_Dataset):
                 self.ministep = 0
                 self.step += 1
                 if self.step % self.interval == 0:
-                    newpath = os.path.join(self.path, "step_" + str(self.step) + "_ckp")
+                    newpath = os.path.join(self.path, "step_" + str(self.step))
                     self.save_to_path(newpath)
 
     def report(self, msg):
@@ -357,7 +353,7 @@ class Checkpoint_Dataset(_Wrapper_Dataset):
             )
             return
         # If item is a folder, get the step count
-        self.step = int(latest.split("_")[-2])
+        self.step = int(latest.split("_")[-1])
         # Proceed
         start = time.time()
         self.dataset.load_from_path(latest)
