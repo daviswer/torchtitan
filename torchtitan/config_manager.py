@@ -168,6 +168,9 @@ class JobConfig:
 
         # training configs
         self.parser.add_argument(
+            "--training.dataset", type=str, default="c4_mini", help="Dataset to use"
+        )
+        self.parser.add_argument(
             "--training.dataset_path",
             type=str,
             help="""
@@ -325,6 +328,13 @@ class JobConfig:
             default=50,
             help="Python garbage control scheduling interval, in steps",
         )
+
+        # experimental dataloader flags
+        self.parser.add_argument(
+            "--training.use_experimental_dataloader",
+            action="store_true",
+            help="Whether to use the experimental dataloader instead of default HF",
+        )
         self.parser.add_argument(
             "--training.data_logical_shards",
             type=int,
@@ -360,11 +370,6 @@ class JobConfig:
             type=str,
             default="1",
             help="Sampling ratios for sub-datasets, comma-separated. Do not need to sum to 1.",
-        )
-        self.parser.add_argument(
-            "--training.use_experimental_dataloader",
-            action="store_true",
-            help="Whether to use the experimental dataloader instead of default HF",
         )
 
         # checkpointing configs
