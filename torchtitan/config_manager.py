@@ -361,6 +361,11 @@ class JobConfig:
             default="1",
             help="Sampling ratios for sub-datasets, comma-separated. Do not need to sum to 1.",
         )
+        self.parser.add_argument(
+            "--training.use_experimental_dataloader",
+            action="store_true",
+            help="Whether to use the experimental dataloader instead of default HF",
+        )
 
         # checkpointing configs
         self.parser.add_argument(

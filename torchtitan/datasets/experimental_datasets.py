@@ -1116,7 +1116,7 @@ class Scalable_Shard_Dataset(_Stateful_Dataset):
 # --------------  CONSTRUCTORS  --------------
 
 
-def build_fms_data_loader(cfg, rank, world_size):
+def build_experimental_data_loader(cfg, rank, world_size):
     """
     Pytorch dataloader for stateful, distributed, and rescalable causal language model (CLM) training.
     Assumes underlying data is sequences of integer values.
