@@ -37,6 +37,7 @@ We report our [Performance](docs/performance.md) verified on 64 A100 GPUs
 
 
 ### Coming soon
+
 1. Async checkpointing
 2. FP8 support
 3. Context Parallel
@@ -52,6 +53,7 @@ git clone https://github.com/pytorch/torchtitan
 cd torchtitan
 pip install -r requirements.txt
 pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu121 # or cu118
+pip3 install --pre torchdata --index-url https://download.pytorch.org/whl/nightly
 ```
 
 ### Downloading a tokenizer

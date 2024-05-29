@@ -5,11 +5,15 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import logging
 import os
 import subprocess
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Sequence
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 try:
     import tomllib
@@ -25,6 +29,8 @@ class OverrideDefinitions:
 
     override_args: Sequence[Sequence[str]] = tuple(tuple(" "))
     test_descr: str = "default"
+    requires_seed_checkpoint: bool = False
+    ngpu: int = 4
 
 
 def build_test_list(args):
@@ -38,6 +44,91 @@ def build_test_list(args):
         OverrideDefinitions(
             [
                 [
+                    "--checkpoint.enable_checkpoint",
+                    f"--job.dump_folder {args.output_dir}/pp_1f1b/",
+                    "--experimental.pipeline_parallel_degree 2",
+                    "--experimental.pipeline_parallel_split_points layers.1",
+                    "--experimental.pipeline_parallel_schedule 1f1b",
+                    "--training.data_parallel_degree 1",
+                ],
+            ],
+            "PP 1D test 1f1b",
+            requires_seed_checkpoint=True,
+            ngpu=2,
+        ),
+        OverrideDefinitions(
+            [
+                [
+                    "--checkpoint.enable_checkpoint",
+                    f"--job.dump_folder {args.output_dir}/pp_gpipe/",
+                    "--experimental.pipeline_parallel_degree 2",
+                    "--experimental.pipeline_parallel_split_points layers.1",
+                    "--experimental.pipeline_parallel_schedule gpipe",
+                    "--training.data_parallel_degree 1",
+                ],
+            ],
+            "PP 1D test gpipe",
+            requires_seed_checkpoint=True,
+            ngpu=2,
+        ),
+        OverrideDefinitions(
+            [
+                [
+                    "--checkpoint.enable_checkpoint",
+                    f"--job.dump_folder {args.output_dir}/pp_dp_1f1b/",
+                    "--experimental.pipeline_parallel_degree 2",
+                    "--experimental.pipeline_parallel_split_points layers.1",
+                    "--experimental.pipeline_parallel_schedule 1f1b",
+                    "--training.data_parallel_degree 2",
+                ],
+            ],
+            "PP+DP 1f1b 2D test",
+            requires_seed_checkpoint=True,
+        ),
+        OverrideDefinitions(
+            [
+                [
+                    "--checkpoint.enable_checkpoint",
+                    f"--job.dump_folder {args.output_dir}/pp_dp_gpipe/",
+                    "--experimental.pipeline_parallel_degree 2",
+                    "--experimental.pipeline_parallel_split_points layers.1",
+                    "--experimental.pipeline_parallel_schedule gpipe",
+                    "--training.data_parallel_degree 2",
+                ],
+            ],
+            "PP+DP gpipe 2D test",
+            requires_seed_checkpoint=True,
+        ),
+        OverrideDefinitions(
+            [
+                [
+                    "--checkpoint.enable_checkpoint",
+                    f"--job.dump_folder {args.output_dir}/pp_tp/",
+                    "--experimental.pipeline_parallel_degree 2",
+                    "--experimental.pipeline_parallel_split_points layers.1",
+                    "--training.tensor_parallel_degree 2",
+                    "--model.norm_type rmsnorm",  # fused_rmsnorm not yet compatible with TP
+                ],
+            ],
+            "PP+TP 2D test",
+            requires_seed_checkpoint=True,
+        ),
+        OverrideDefinitions(
+            [
+                [
+                    "--checkpoint.enable_checkpoint",
+                    f"--job.dump_folder {args.output_dir}/pp_tracer/",
+                    "--experimental.pipeline_parallel_degree 2",
+                    "--experimental.pipeline_parallel_split_points layers.1",
+                    "--model.norm_type rmsnorm",  # fused_rmsnorm not yet compatible with tracer
+                ],
+            ],
+            "PP tracer frontend test",
+            requires_seed_checkpoint=True,
+        ),
+        OverrideDefinitions(
+            [
+                [
                     f"--job.dump_folder {args.output_dir}/default/",
                 ],
             ],
@@ -46,11 +137,20 @@ def build_test_list(args):
         OverrideDefinitions(
             [
                 [
-                    "--training.compile",
+                    "--training.compile --model.norm_type=rmsnorm",
                     f"--job.dump_folder {args.output_dir}/1d_compile/",
                 ],
             ],
             "1D compile",
+        ),
+        OverrideDefinitions(
+            [
+                [
+                    "--training.compile --training.tensor_parallel_degree 2 --model.norm_type=rmsnorm",
+                    f"--job.dump_folder {args.output_dir}/2d_compile/",
+                ],
+            ],
+            "2D compile",
         ),
         OverrideDefinitions(
             [
@@ -100,23 +200,43 @@ def build_test_list(args):
     return integration_tests_flavors
 
 
+def _run_cmd(cmd):
+    return subprocess.run(
+        [cmd],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        shell=True,
+    )
+
+
 def run_test(test_flavor: OverrideDefinitions, full_path: str):
     # run_test supports sequence of tests.
     for override_arg in test_flavor.override_args:
-        cmd = f"CONFIG_FILE={full_path} NGPU=4 LOG_RANK=0,1,2,3 ./run_llama_train.sh"
+
+        cmd = f"CONFIG_FILE={full_path} NGPU={test_flavor.ngpu} LOG_RANK=0,1,2,3 ./run_llama_train.sh"
         if override_arg:
             cmd += " " + " ".join(override_arg)
-        print(
+        logger.info(
             f"=====Integration test, flavor : {test_flavor.test_descr}, command : {cmd}====="
         )
-        result = subprocess.run(
-            [cmd],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            shell=True,
-        )
-        print(result.stdout)
+
+        if test_flavor.requires_seed_checkpoint:
+            dump_folder_arg = None
+            for arg in override_arg:
+                if "--job.dump_folder" in arg:
+                    dump_folder_arg = arg
+            assert (
+                dump_folder_arg is not None
+            ), "Can't use seed checkpoint if folder is not specified"
+            logger.info("Creating seed checkpoint")
+            result = _run_cmd(
+                f"CONFIG_FILE={full_path} ./create_seed_checkpoint.sh {dump_folder_arg}"
+            )
+            logger.info(result.stdout)
+
+        result = _run_cmd(cmd)
+        logger.info(result.stdout)
         if result.returncode != 0:
             raise Exception(
                 f"Integration test failed, flavor : {test_flavor.test_descr}, command : {cmd}"
