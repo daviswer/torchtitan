@@ -1132,7 +1132,7 @@ def build_experimental_data_loader(cfg, rank, world_size):
     """
 
     datasets, weights = parse_data_args(
-        cfg.training.datasets, cfg.training.dataset_weights
+        cfg.dataset.datasets, cfg.dataset.dataset_weights
     )
 
     def causal_lm(data_seq, prompt_len=0):
@@ -1150,24 +1150,24 @@ def build_experimental_data_loader(cfg, rank, world_size):
     # Implements dataset sampling and rescalability.
     droplist = [
         int(x.strip())
-        for x in cfg.training.drop_tokens.split(",")
+        for x in cfg.dataset.drop_tokens.split(",")
         if len(x.strip()) > 0
     ]
-    droplist = droplist + [cfg.training.bos_token, cfg.training.eos_token]
+    droplist = droplist + [cfg.dataset.bos_token, cfg.dataset.eos_token]
     data = Sampling_Dataset(
-        cfg.training.dataset_path,
+        cfg.dataset.dataset_path,
         Scalable_Shard_Dataset,
         rank,
         world_size,
-        cfg.training.eos_token,
-        bos_token=None if cfg.training.bos_token == -1 else cfg.training.bos_token,
+        cfg.dataset.eos_token,
+        bos_token=None if cfg.dataset.bos_token == -1 else cfg.dataset.bos_token,
         strip_tokens=set(droplist),
         min_length=3,
         datasets=datasets,
         weights=weights,
         seed=42,
         verbose=(rank == 0),
-        n_logical_shards=cfg.training.data_logical_shards,
+        n_logical_shards=cfg.dataset.data_logical_shards,
     )
     # Wrap above dataset in packing logic to form constant-length lines.
     data = Buffer_Dataset(
