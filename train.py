@@ -154,7 +154,7 @@ def main(job_config: JobConfig):
     if parallel_dims.pp_enabled:
         pp_mesh = world_mesh["pp"]
 
-    if job_config.use_experimental_dataloader:
+    if job_config.dataset.use_experimental_dataloader:
         data_loader = build_experimental_data_loader(
             job_config,
             dp_rank,
