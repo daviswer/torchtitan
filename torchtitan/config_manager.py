@@ -331,42 +331,42 @@ class JobConfig:
 
         # experimental dataloader flags
         self.parser.add_argument(
-            "--training.use_experimental_dataloader",
+            "--dataset.use_experimental_dataloader",
             action="store_true",
             help="Whether to use the experimental dataloader instead of default HF",
         )
         self.parser.add_argument(
-            "--training.data_logical_shards",
+            "--dataset.data_logical_shards",
             type=int,
             default=768,
             help="Dataloader logical shards. All divisors are possible world sizes.",
         )
         self.parser.add_argument(
-            "--training.bos_token",
+            "--dataset.bos_token",
             type=int,
             default=-1,
             help="BOS token index value. If not using, leave as -1.",
         )
         self.parser.add_argument(
-            "--training.eos_token",
+            "--dataset.eos_token",
             type=int,
             default=0,
             help="EOS or SEP token index value.",
         )
         self.parser.add_argument(
-            "--training.drop_tokens",
+            "--dataset.drop_tokens",
             type=str,
             default="",
             help="Dummy token values to drop from begin/end of sequences (comma-separated ints)",
         )
         self.parser.add_argument(
-            "--training.datasets",
+            "--dataset.datasets",
             type=str,
             default="c4_mini",
             help="Datasets to use for training, comma-separated",
         )
         self.parser.add_argument(
-            "--training.dataset_weights",
+            "--dataset.dataset_weights",
             type=str,
             default="1",
             help="Sampling ratios for sub-datasets, comma-separated. Do not need to sum to 1.",

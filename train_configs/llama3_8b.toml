@@ -30,7 +30,7 @@ batch_size = 1
 seq_len = 8192
 warmup_steps = 200  # lr scheduler warm up
 max_norm = 1.0  # grad norm clipping
-steps = 10000000
+steps = 1000
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 pipeline_parallel_degree = 1
@@ -38,15 +38,20 @@ fp8_linear = ""
 compile = false
 dataset = "c4"
 
-data_logical_shards=768
-bos_token=128000
-eos_token=128001
-datasets = "dataset=c4"
-dataset_path = "./torchtitan/datasets/llama3"
-dataset_weights=1
+[dataset]
+use_experimental_dataloader = false
+data_logical_shards = 768
+bos_token = 128000
+eos_token = 128001
+# dataset_path = "/fsx/datasets/"
+# datasets = "CommonCrawl,C4,Github,Wikipedia,Books,ArXiv,StackExchange"
+# dataset_weights = "67,15,4.5,4.5,4.5,2.5,2"
+dataset_path = "./torchtitan/datasets/experimental/llama3"
+datasets = "c4_mini"
+dataset_weights = "1"
 
 [checkpoint]
-enable_checkpoint = true
+enable_checkpoint = false
 folder = "checkpoint"
 interval_type = "steps"
 interval = 500
