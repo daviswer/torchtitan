@@ -30,7 +30,7 @@ batch_size = 1
 seq_len = 8192
 warmup_steps = 200  # lr scheduler warm up
 max_norm = 1.0  # grad norm clipping
-steps = 1000
+steps = 1000000
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 pipeline_parallel_degree = 1
@@ -39,7 +39,7 @@ compile = false
 dataset = "c4"
 
 [dataset]
-use_experimental_dataloader = false
+use_experimental_dataloader = true
 data_logical_shards = 768
 bos_token = 128000
 eos_token = 128001
@@ -51,7 +51,7 @@ datasets = "c4_mini"
 dataset_weights = "1"
 
 [checkpoint]
-enable_checkpoint = false
+enable_checkpoint = true
 folder = "checkpoint"
 interval_type = "steps"
 interval = 500
