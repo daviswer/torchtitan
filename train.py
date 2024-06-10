@@ -114,6 +114,9 @@ def main(job_config: JobConfig):
     init_logger()
     logger.info(f"Starting job: {job_config.job.description}")
 
+    torch.cuda.manual_seed(2023)
+    torch.manual_seed(2023)
+
     # used for colorful printing
     color = Color if job_config.metrics.enable_color_printing else NoColor
 
