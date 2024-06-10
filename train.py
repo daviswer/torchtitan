@@ -114,6 +114,7 @@ def main(job_config: JobConfig):
     init_logger()
     logger.info(f"Starting job: {job_config.job.description}")
 
+    torch.use_deterministic_algorithms(True)
     torch.cuda.manual_seed(2023)
     torch.manual_seed(2023)
 
