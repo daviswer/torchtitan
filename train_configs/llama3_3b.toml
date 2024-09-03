@@ -11,7 +11,7 @@ save_traces_folder = "profile_trace"
 profile_freq = 100
 
 [metrics]
-log_freq = 10
+log_freq = 100
 enable_tensorboard = false
 save_tb_folder = "tb"
 
@@ -19,41 +19,34 @@ save_tb_folder = "tb"
 name = "llama3"
 flavor = "3B"
 norm_type = "rmsnorm"  # layernorm / np_layernorm / rmsnorm / fused_rmsnorm
-tokenizer_path = "/u/tmhoangt/tokenizers/llama3/original/tokenizer.model"
+tokenizer_path = "/proj/data-eng/tokenizers-llama3/tokenizer.model"
 
 [optimizer]
 name = "AdamW"
 lr = 3e-4
 
 [training]
-batch_size = 2
+batch_size = 4
 seq_len = 4096
-warmup_steps = 200  # lr scheduler warm up
+warmup_steps = 1000  # lr scheduler warm up
 max_norm = 1.0  # grad norm clipping
 # (bs, seq_len, steps) = (3, 8192, 152587) -> 30B tokens
 #  steps = 152587
-steps = 1000
+#100,000,000,000/4096/2/128=95367  128 GPUs bs=2 
+#1,000,000,000,000/4096/4/128=476837  128 GPUs bs=4 
+steps = 500000
 data_parallel_degree = -1
 tensor_parallel_degree = 1
 compile = false
-dataset = "c4"
+dataset = ""
 
 [dataset]
 use_experimental_dataloader = true
-data_logical_shards = 768
+data_logical_shards = 1280 #768
 bos_token = 128000
 eos_token = 128001
-# dataset_path = "/fsx/datasets/"
-# datasets = "CommonCrawl,C4,Github,Wikipedia,Books,ArXiv,StackExchange"
-# dataset_weights = "67,15,4.5,4.5,4.5,2.5,2"
-# dataset_path = "./torchtitan/datasets/experimental/llama3"
-# datasets = "c4_mini"
-# dataset_weights = "1"
-#dataset_path = "/gpfs/dolma_v1_7"
-#datasets = "dataset=cc_en_head,dataset=cc_en_middle,dataset=cc_en_tail,dataset=falcon,dataset=starcoder,dataset=c4,dataset=reddit,dataset=pes2o,dataset=arxiv,dataset=stackexchange,dataset=tulu_flan,dataset=cc_news_head,dataset=cc_news_middle,dataset=cc_news_tail,dataset=open,dataset=algebraic,dataset=books,dataset=megawika,dataset=wiki"
-#dataset_weights = "1456,1835,1558,1851,450,1500,300,236,114,200,100,62,27,11,51,49,100,55,45"
-dataset_path = "/dccstor/challenge5543/tokens"
-datasets = "dataset=fineweb-edu"
+dataset_path = "/proj/data-eng/blog/FineWeb-edu/parquets"
+datasets = "lang=en"
 dataset_weights = "1"
 num_data_workers = 1
 col_name = "tokens"
@@ -63,10 +56,10 @@ file_type = "arrow"
 pipeline_parallel_degree = 1
 
 [checkpoint]
-enable_checkpoint = false
+enable_checkpoint = true
 folder = "checkpoint"
 interval_type = "steps"
-interval = 500
+interval = 10000
 model_weights_only = false
 export_dtype = "float32"
 async_mode = "disabled" # ["disabled", "async", "async_with_pinned_mem"]
