@@ -54,7 +54,8 @@ def _get_latest(targdir, qualifier=lambda x: True):
             ],
             key=lambda path: int(path.split("/")[-1].split("-")[1]),
         )
-        return os.path.join(targdir, latest)
+        return latest
+        #return os.path.join(targdir, latest)
     return None
 
 
@@ -524,7 +525,8 @@ class CheckpointDataset(_WrapperDataset):
                 )
             return ""
         # Check latest path
-        latest = os.path.join(path, _get_latest(path))
+        #latest = os.path.join(path, _get_latest(path))
+        latest = _get_latest(path)
         if verbose:
             self.report(f"Checkpoint detected at {latest}")
         # If item is not a folder, exit early
@@ -544,7 +546,8 @@ class CheckpointDataset(_WrapperDataset):
                 )
             return ""
         # If item is a folder, get the step count
-        self.step = int(latest.split("_")[-2])
+        #self.step = int(latest.split("_")[-2])
+        self.step = int(latest.split("-")[-1])
         return latest
 
     def save_to_path(self, path: str):

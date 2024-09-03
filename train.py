@@ -27,7 +27,8 @@ from torchtitan.parallelisms import (
     ParallelDims,
 )
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
-
+from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
+torch.serialization.add_safe_globals([WeightWithDynamicFloat8CastTensor])
 
 def get_train_context(enable_loss_parallel: bool, enable_compiled_autograd: bool):
     @contextlib.contextmanager
@@ -379,14 +380,15 @@ def main(job_config: JobConfig):
                 }
                 metric_logger.log(metrics, step=train_state.step)
 
-                logger.info(
-                    f"{color.cyan}step: {train_state.step:2}  "
-                    f"{color.green}loss: {global_avg_loss:7.4f}  "
-                    f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
-                    f"({gpu_mem_stats.max_reserved_pct:.2f}%)  "
-                    f"{color.blue}wps: {round(wps):,}  "
-                    f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
-                )
+                if torch.distributed.get_rank() == 0:
+                    logger.info(
+                        f"{color.cyan}step: {train_state.step:2}  "
+                        f"{color.green}loss: {global_avg_loss:7.4f}  "
+                        f"{color.yellow}memory: {gpu_mem_stats.max_reserved_gib:5.2f}GiB"
+                        f"({gpu_mem_stats.max_reserved_pct:.2f}%)  "
+                        f"{color.blue}wps: {round(wps):,}  "
+                        f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
+                    )
 
                 losses_since_last_log.clear()
                 ntokens_since_last_log = 0
