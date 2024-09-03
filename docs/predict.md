@@ -84,3 +84,13 @@ llm=LMHeadModel(model,tokenizer)
 llm.get_predictions("Capital of India is New")
 llm.get_next_word_probabilities("Capital of India is New",top_k=5)
 ```
+
+## References
+- Convert Sharded Checkpoints to a Single File https://github.com/pytorch/torchtitan/blob/main/docs/checkpoint.md
+    ```
+    python -m torch.distributed.checkpoint.format_utils dcp_to_torch torchtitan/outputs/checkpoint/step-1000 checkpoint.pt
+    ```
+- DCP Checkpoint https://www.youtube.com/watch?v=ldBmHNva_Fw 
+- Distributed Checkpoint Recipe https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html 
+
+
