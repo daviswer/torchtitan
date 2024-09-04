@@ -1,6 +1,6 @@
 # Get predictions for next word
 
-## Load the Distributed Checkpoint and tokenizer
+## Setup the Model
 ```
 from torchtitan.models import model_name_to_cls, model_name_to_tokenizer, models_config
 model_config = models_config["llama3"]["3B"]
@@ -14,7 +14,12 @@ import torch
 # If you have some arbitrary code which performs some tensor construction without explicitly specifying a device, you can override it to instead construct on meta device by using the torch.device() context manager
 # This is especially helpful NN module construction, where you often are not able to explicitly pass in a device for initialization:
 with torch.device("meta"): model = model_cls.from_model_args(model_config)
+```
 
+## Load the checkpoint using one of the mechanisms below:
+
+### Load the distributed checkpoint
+```
 # NN modules have a convenience method torch.nn.Module.to_empty() that allow you to the module to another device, leaving all parameters uninitialized. You are expected to explicitly reinitialize the parameters manually
 model.to_empty(device="cuda")
 #model.to_empty(device="cpu")
@@ -23,7 +28,17 @@ state_dict = {"model": model.state_dict(),}
 import torch.distributed.checkpoint as DCP
 DCP.load(state_dict=state_dict,checkpoint_id="../checkpoint/step-100000/",)
 model.load_state_dict(state_dict["model"])
+```
 
+### Load from sharded checkpoints that are converted to a single file (if already available as shown in References)
+```
+checkpoint_file="../checkpoint.pt"
+checkpoint = torch.load(checkpoint_file)
+model.load_state_dict(checkpoint["model"])
+```
+
+## Load the tokenizer
+```
 from torchtitan.datasets import build_tokenizer
 tokenizer = build_tokenizer(model_name_to_tokenizer["llama3"], "/proj/data-eng/tokenizers-llama3/tokenizer.model") # tiktoken
 ```
