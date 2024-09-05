@@ -71,19 +71,20 @@ class LMHeadModel:
         # Initialize the model and the tokenizer.
         self.model = model
         self.tokenizer = tokenizer   
-    def get_predictions(self, sentence):
+    def get_predictions(self, sentence, eos_token: int = None):
         # Encode the sentence using the tokenizer and return the model predictions.
-        inputs = torch.tensor([self.tokenizer.encode(sentence,bos=128000,eos=None)]).to("cuda")
+        inputs = torch.tensor([self.tokenizer.encode(sentence,bos=128000,eos=eos_token)]).to("cuda")
         with torch.no_grad():
             outputs = self.model(inputs)
             predictions = outputs[0]
         return predictions
-    def get_next_word_probabilities(self, sentence, top_k=500):
+    def get_next_word_probabilities(self, sentence, top_k:int = 500, temperature:float = 1.0, eos_token: int = None, ):
+        if temperature <= 0: temperature = 1e-10  # Prevent division by zero or negative temperatures
         # Get the model predictions for the sentence.
-        inputs = torch.tensor([self.tokenizer.encode(sentence,bos=128000,eos=None)]).to("cuda")
+        inputs = torch.tensor([self.tokenizer.encode(sentence,bos=128000,eos=eos_token)]).to("cuda")
         predictions = self.model(inputs)
         # Get the next token candidates.
-        next_token_candidates_tensor = predictions[0, -1, :]
+        next_token_candidates_tensor = predictions[0, -1, :]/temperature
         # Get the top k next token candidates.
         topk_candidates_indexes = torch.topk(next_token_candidates_tensor, top_k).indices.tolist()
         # Get the token probabilities for all candidates.
@@ -91,13 +92,60 @@ class LMHeadModel:
         # Filter the token probabilities for the top k candidates.
         topk_candidates_probabilities = all_candidates_probabilities[topk_candidates_indexes].tolist()
         # Decode the top k candidates back to words.
-        topk_candidates_tokens = [self.tokenizer.decode(list([idx])).strip() for idx in topk_candidates_indexes]
+        topk_candidates_tokens = [self.tokenizer.decode(list([idx])) for idx in topk_candidates_indexes]
         # Return the top k candidates and their probabilities.
-        return list(zip(topk_candidates_tokens, topk_candidates_probabilities))
+        return list(zip(topk_candidates_tokens, topk_candidates_probabilities,topk_candidates_indexes))
+    def generate(self, sentence, max_tokens_to_generate: int=100, top_k:int = 500, temperature: float = 1.0, eos_word = ".", ):
+        for _ in range(max_tokens_to_generate):
+            next_token_probabilities = self.get_next_word_probabilities(sentence, top_k=top_k, temperature=temperature, eos_token=None)
+            # Sample the next token from the probability distribution
+            next_token_index = torch.multinomial(torch.tensor([j for (_,j,_) in next_token_probabilities], dtype=torch.float), num_samples=1)[0].item()
+            #print(next_token_index)
+            next_word=next_token_probabilities[next_token_index]
+            #print(next_word)
+            sentence=sentence+next_word[0]
+            if eos_word is not None and next_word[0] == eos_word: break
+        return sentence
+```
 
+## Perform predictions
+```
 llm=LMHeadModel(model,tokenizer)
 llm.get_predictions("Capital of India is New")
-llm.get_next_word_probabilities("Capital of India is New",top_k=5)
+llm.get_next_word_probabilities("Capital of India is New",top_k=5,temperature=1.0)
+llm.get_next_word_probabilities("Capital of India is New",top_k=5,temperature=0.9)
+llm.get_next_word_probabilities("Capital of India is New",top_k=5,temperature=2.0)
+
+llm=LMHeadModel(model,tokenizer)
+llm.generate("Capital of India is",max_tokens_to_generate=50,top_k=5,temperature=1.0001)
+llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=1.0001)
+```
+## Parameter: temperature T
+* When T>1: Increasing T makes the distribution more uniform (flatter), increasing the randomness of the sampling. This happens because as T grows, the difference between the largest and smallest logits has less impact on the resulting probabilities, making less likely events more probable.
+* When T=1: The model behaves normally, with no modification to the logits before applying the softmax function. The probabilities reflect the model’s learned distribution.
+* When T<1: Decreasing T makes the distribution sharper, reducing randomness. Lower temperatures increase the disparity between the higher and lower logits, making the model’s predictions more deterministic (i.e., the highest logit value(s) dominate the probability distribution).
+
+## Output
+```
+>>> llm=LMHeadModel(model,tokenizer)
+>>> llm.generate("Capital of India is",max_tokens_to_generate=50,top_k=5,temperature=1.0001)
+'Capital of India is New Delhi.'
+>>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=1.0001)
+'I enjoy walking in the park and enjoying the beauty of the trees and flowers.'
+>>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=1.1)
+'I enjoy walking in the forest, and especially in the springtime.'
+>>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=2.1)
+'I enjoy walking in the woods, but the last couple years of drought have caused a few of my plants to wilt or even die.'
+>>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=2.1)
+'I enjoy walking in the woods at the beginning of each week to find out about nature.'
+>>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=2.1)
+'I enjoy walking in the forest, especially at night and at the beginning.'
+>>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=2.1)
+'I enjoy walking in the park, especially the trails that surround the city of Chicago.'
+>>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=2.1)
+'I enjoy walking in the park at night with a friend.'
+>>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=0)
+'I enjoy walking in the woods and watching the birds.'
 ```
 
 ## References
@@ -107,5 +155,3 @@ llm.get_next_word_probabilities("Capital of India is New",top_k=5)
     ```
 - DCP Checkpoint https://www.youtube.com/watch?v=ldBmHNva_Fw 
 - Distributed Checkpoint Recipe https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html 
-
-
