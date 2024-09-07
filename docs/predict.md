@@ -148,10 +148,64 @@ llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperat
 'I enjoy walking in the woods and watching the birds.'
 ```
 
+## Convert to Huggingface format
+### Convert Sharded Checkpoints to a Single File
+Reference https://github.com/pytorch/torchtitan/blob/main/docs/checkpoint.md
+    ```
+    python -m torch.distributed.checkpoint.format_utils dcp_to_torch checkpoint/step-500000 checkpoint-500000.pt
+    mkdir single-checkpoint
+    cp checkpoint-500000.pt single-checkpoint/consolidated.00.pth
+    cp tokenizer.model single-checkpoint/.
+    ```
+
+### Create the single-checkpoint/params.json
+    ```
+    {
+    "dim":3072, "n_layers":24, "n_heads":32, "n_kv_heads":8, "vocab_size":128256, "multiple_of":1024, "ffn_dim_multiplier":1.0, "norm_eps":1e-05, "rope_theta":500000, "max_batch_size":32, "max_seq_len":4096, "depth_init":true, "norm_type":"rmsnorm"
+    }
+    ```
+
+### Changes to src/transformers/models/llama/convert_llama_weights_to_hf.py
+    ```
+    git clone https://github.com/huggingface/transformers.git
+    cd transformers
+    ```
+
+    Edit the src/transformers/models/llama/convert_llama_weights_to_hf.py
+    ```
+     NUM_SHARDS = {
+    +    "3B": 1,
+         "7B": 1,
+         "8B": 1,
+         "8Bf": 1,
+    
+    -CONTEXT_LENGTH_FOR_VERSION = {"3.1": 131072, "3": 8192, "2": 4096, "1": 2048}
+    +CONTEXT_LENGTH_FOR_VERSION = {"3.1": 4096, "3": 4096, "2": 4096, "1": 2048}
+    
+    
+         print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
+         # Load weights
+         if num_shards == 1:
+             # Not sharded
+             # (The sharded implementation would also work, but this is simpler.)
+             loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
+    +        loaded=loaded.get("model")
+         else:
+
+    ```
+
+###  Convert to Huggingface format
+    ```
+    python src/transformers/models/llama/convert_llama_weights_to_hf.py --input_dir ../single-checkpoint --model_size 3B --output_dir ../output-checkpoint --llama_version 3
+    ```
+
+### Run the model generator using the huggingface format
+    ```
+    from transformers import pipeline
+    generator = pipeline('text-generation', model = '/proj/data-eng/blog/output-checkpoint',device="cuda")
+    generator("The capital of India is", max_length = 20, truncation=True)
+    ```
+
 ## References
-- Convert Sharded Checkpoints to a Single File https://github.com/pytorch/torchtitan/blob/main/docs/checkpoint.md
-    ```
-    python -m torch.distributed.checkpoint.format_utils dcp_to_torch torchtitan/outputs/checkpoint/step-1000 checkpoint.pt
-    ```
 - DCP Checkpoint https://www.youtube.com/watch?v=ldBmHNva_Fw 
 - Distributed Checkpoint Recipe https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html 
