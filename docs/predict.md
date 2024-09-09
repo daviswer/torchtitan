@@ -128,6 +128,26 @@ llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperat
 ## Output
 ```
 >>> llm=LMHeadModel(model,tokenizer)
+>>> llm.get_predictions("Capital of India is New")
+tensor([[ 2.0105,  7.3804,  5.6291,  ..., -4.3087, -4.3087, -4.3087],
+        [ 4.6602,  5.5259,  1.8134,  ..., -5.6969, -5.6969, -5.6969],
+        [ 1.4126,  2.1090,  0.5161,  ..., -5.7766, -5.7766, -5.7767],
+        [ 6.0208,  4.7962,  3.4298,  ..., -7.1207, -7.1207, -7.1207],
+        [ 1.7924,  3.5209,  2.1111,  ..., -6.4764, -6.4764, -6.4765],
+        [ 7.0394,  3.9047,  1.7875,  ..., -6.0383, -6.0383, -6.0383]],
+       device='cuda:0')
+>>> llm.get_next_word_probabilities("I enjoy walking in the",top_k=5,temperature=1.0)
+[(' woods', 0.3191245198249817, 33633), (' park', 0.08074512332677841, 6246), (' forest', 0.06311947107315063, 13952), (' mountains', 0.028134386986494064, 24405), (' countryside', 0.020272845402359962, 47967)]
+>>> llm.get_next_word_probabilities("Capital of India is New",top_k=5,temperature=1.0)
+[(' Delhi', 0.9836402535438538, 22767), ('-D', 0.002182676689699292, 9607), (' del', 0.0020892538595944643, 1624), ('\n', 0.0016441616462543607, 198), (' De', 0.0011863205581903458, 1611)]
+>>> llm.get_next_word_probabilities("Capital of India is New-D",top_k=5,temperature=1.0)
+[('el', 0.999659538269043, 301), ('i', 5.726426388719119e-05, 72), ('ub', 5.389955549617298e-05, 392), ('en', 3.832573929685168e-05, 268), ('uw', 3.640889190137386e-05, 43210)]
+>>> llm.get_next_word_probabilities("Capital of India is New-Del",top_k=5,temperature=1.0)
+[('hi', 0.9990053772926331, 6151), ('ha', 0.0002590856747701764, 4317), ('-H', 4.3100633774884045e-05, 11529), ('h', 4.103155879420228e-05, 71), ('\n', 3.897276837960817e-05, 198)]
+>>> llm.get_next_word_probabilities("Capital of India is New-Delhi",top_k=5,temperature=1.0)
+[('.', 0.2893654704093933, 13), (',', 0.16028709709644318, 11), ('\n', 0.1402176171541214, 198), ('.\n', 0.12820839881896973, 627), (' which', 0.055757053196430206, 902)]
+
+>>> llm=LMHeadModel(model,tokenizer)
 >>> llm.generate("Capital of India is",max_tokens_to_generate=50,top_k=5,temperature=1.0001)
 'Capital of India is New Delhi.'
 >>> llm.generate("I enjoy walking in the",max_tokens_to_generate=50,top_k=5,temperature=1.0001)
