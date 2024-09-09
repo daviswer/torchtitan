@@ -183,13 +183,21 @@ Edit the src/transformers/models/llama/convert_llama_weights_to_hf.py
 -CONTEXT_LENGTH_FOR_VERSION = {"3.1": 131072, "3": 8192, "2": 4096, "1": 2048}
 +CONTEXT_LENGTH_FOR_VERSION = {"3.1": 4096, "3": 4096, "2": 4096, "1": 2048}
 
+def write_model(
+     vocab_size=None,
+     num_shards=None,
+     instruct=False,
++    file_name="consolidated.00.pth",
+ ):
+
+
 
      print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
      # Load weights
      if num_shards == 1:
          # Not sharded
          # (The sharded implementation would also work, but this is simpler.)
-         loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
++        loaded = torch.load(os.path.join(input_base_path, file_name), map_location="cpu")
 +        loaded=loaded.get("model")
      else:
 
@@ -200,11 +208,52 @@ Edit the src/transformers/models/llama/convert_llama_weights_to_hf.py
 python src/transformers/models/llama/convert_llama_weights_to_hf.py --input_dir ../single-checkpoint --model_size 3B --output_dir ../output-checkpoint --llama_version 3
 ```
 
+## Convert multiple checkpoint step folders
+convert_checkpoints.sh # Run in torchtitan folder
+```
+#!/bin/bash
+for ckp in `ls ../checkpoint`; do
+  if [ ! -e ../single-checkpoint/$ckp.pt ]; then
+    echo python -m torch.distributed.checkpoint.format_utils dcp_to_torch ../checkpoint/$ckp ../single-checkpoint/$ckp.pt
+    python -m torch.distributed.checkpoint.format_utils dcp_to_torch ../checkpoint/$ckp ../single-checkpoint/$ckp.pt
+  else
+    echo ../single-checkpoint/$ckp.pt already available
+  fi
+done
+```
+
+convert_checkpoints_hf.sh # Run in transformers folder
+```
+#!/bin/bash
+for ckp in `ls ../single-checkpoint/*.pt | xargs -n 1 basename -s .pt`; do
+  echo $ckp
+  if [ ! -e ../output-checkpoint/$ckp ]; then
+    echo python src/transformers/models/llama/convert_llama_weights_to_hf.py --input_dir ../single-checkpoint --file_name $ckp.pt --model_size 3B --output_dir ../output-checkpoint/$ckp --llama_version 3
+    python src/transformers/models/llama/convert_llama_weights_to_hf.py --input_dir ../single-checkpoint --file_name $ckp.pt --model_size 3B --output_dir ../output-checkpoint/$ckp --llama_version 3
+  fi
+done
+```
+
 ### Run the model generator using the huggingface format
 ```
 from transformers import pipeline
 generator = pipeline('text-generation', model = '/proj/data-eng/blog/output-checkpoint',device="cuda")
 generator("The capital of India is", max_length = 20, truncation=True)
+```
+
+Output
+```
+>>> from transformers import pipeline
+>>> generator = pipeline('text-generation', model = '/proj/data-eng/blog/hfmodel/fp8_fineweb/')
+Loading checkpoint shards: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:44<00:00, 22.04s/it]
+Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
+Hardware accelerator e.g. GPU is available in the environment, but no `device` argument is passed to the `Pipeline` object. Model will be on CPU.
+>>> generator("The capital of India is", max_length = 20, truncation=True)
+Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+[{'generated_text': 'The capital of India is New Delhi. The capital of India is New Delhi. The capital of India'}]
+>>> generator("I enjoy walking in the", max_length = 20)
+Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation.
+[{'generated_text': 'I enjoy walking in the woods and I love to watch the birds. I have a bird feeder in'}]
 ```
 
 ## References
