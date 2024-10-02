@@ -52,6 +52,9 @@ eos_token = 128001
 dataset_path = "./torchtitan/datasets/experimental/llama3"
 datasets = "c4_mini"
 dataset_weights = "1"
+num_data_workers = 1
+file_type = "arrow"
+col_name = "tokens"
 
 [experimental]
 pipeline_parallel_degree = 1
