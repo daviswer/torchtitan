@@ -41,6 +41,18 @@ tensor_parallel_degree = 1
 compile = false
 dataset = "c4_test"  # supported datasets: c4_test (2K), c4 (177M)
 
+[dataset]
+use_experimental_dataloader = true
+data_logical_shards = 768
+bos_token = 128000
+eos_token = 128001
+# dataset_path = "/fsx/datasets/"
+# datasets = "CommonCrawl,C4,Github,Wikipedia,Books,ArXiv,StackExchange"
+# dataset_weights = "67,15,4.5,4.5,4.5,2.5,2"
+dataset_path = "./torchtitan/datasets/experimental/llama3"
+datasets = "c4_mini"
+dataset_weights = "1"
+
 [experimental]
 pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false

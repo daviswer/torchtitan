@@ -15,7 +15,7 @@ from torch.distributed.elastic.multiprocessing.errors import record
 from torchtitan import utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
 from torchtitan.config_manager import JobConfig
-from torchtitan.datasets import build_hf_data_loader, build_tokenizer
+from torchtitan.datasets import build_experimental_dataloader, build_hf_data_loader, build_tokenizer
 from torchtitan.float8 import Float8Handler
 from torchtitan.logging import init_logger, logger
 from torchtitan.metrics import build_gpu_memory_monitor, build_metric_logger
@@ -101,14 +101,21 @@ def main(job_config: JobConfig):
     tokenizer = build_tokenizer(tokenizer_type, job_config.model.tokenizer_path)
 
     # build dataloader
-    data_loader = build_hf_data_loader(
-        job_config.training.dataset,
-        job_config.training.dataset_path,
-        tokenizer,
-        job_config.training.batch_size,
-        job_config.training.seq_len,
-        dp_degree,
-        dp_rank,
+    if job_config.dataset.use_experimental_dataloader:
+        data_loader = build_experimental_dataloader(
+            job_config,
+            dp_rank,
+            dp_degree,
+        )
+    else:
+        data_loader = build_hf_data_loader(
+            job_config.training.dataset,
+            job_config.training.dataset_path,
+            tokenizer,
+            job_config.training.batch_size,
+            job_config.training.seq_len,
+            dp_degree,
+            dp_rank,
     )
 
     # build model (using meta init)
