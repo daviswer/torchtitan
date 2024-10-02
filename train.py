@@ -15,7 +15,7 @@ from torch.distributed.elastic.multiprocessing.errors import record
 from torchtitan import utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
 from torchtitan.config_manager import JobConfig
-from torchtitan.datasets import build_experimental_dataloader, build_hf_data_loader, build_tokenizer
+from torchtitan.datasets import build_experimental_data_loader, build_hf_data_loader, build_tokenizer
 from torchtitan.float8 import Float8Handler
 from torchtitan.logging import init_logger, logger
 from torchtitan.metrics import build_gpu_memory_monitor, build_metric_logger
@@ -102,7 +102,7 @@ def main(job_config: JobConfig):
 
     # build dataloader
     if job_config.dataset.use_experimental_dataloader:
-        data_loader = build_experimental_dataloader(
+        data_loader = build_experimental_data_loader(
             job_config,
             dp_rank,
             dp_degree,
