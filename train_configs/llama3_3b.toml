@@ -26,6 +26,7 @@ name = "AdamW"
 lr = 4.8e-4
 
 [training]
+seed = 2024
 batch_size = 4
 seq_len = 4096
 warmup_steps = 2000  # lr scheduler warm up
@@ -35,7 +36,19 @@ data_parallel_replicate_degree = 1
 data_parallel_shard_degree = -1
 tensor_parallel_degree = 1
 compile = true
-dataset = "c4"
+dataset = ""
+
+[dataset]
+use_experimental_dataloader = true
+data_logical_shards = 1280
+bos_token = 128000
+eos_token = 128001
+dataset_path = "/proj/data-eng/blog/FineWeb-edu/parquets"
+datasets = "lang=en"
+dataset_weights = "1"
+num_data_workers = 1
+col_name = "tokens"
+file_type = "arrow"
 
 [experimental]
 pipeline_parallel_degree = 1
