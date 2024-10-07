@@ -80,6 +80,10 @@ class Float8Handler:
         self._sync_float8_amax_and_scale_history = None
         self.compile = job_config.training.compile
 
+        # allowlist this to make FP8 re-loadable from checkpoints
+        from torchao.float8.fsdp_utils import WeightWithDynamicFloat8CastTensor
+        torch.serialization.add_safe_globals([WeightWithDynamicFloat8CastTensor])
+
         logger.info("Float8 training active")
 
     def convert_to_float8_training(self, model: nn.Module):
