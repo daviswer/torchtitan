@@ -220,8 +220,8 @@ class CheckpointManager:
 
         self.states.update(
             {
-                "model": ModelWrapper(model),
-                "optimizer": OptimizerWrapper(model, optimizer),
+                "model": ModelWrapper(model_parts),
+                "optimizer": OptimizerWrapper(model_parts, optimizers),
             }
         )
         if len(lr_schedulers) == 1:
