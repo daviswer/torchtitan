@@ -174,6 +174,23 @@ class JobConfig:
             help="Tokenizer path",
         )
 
+        # muP configs
+        self.parser.add_argument(
+            "--mup.a_f_skew", type=float, default=0.0, help="Ratio of attn/ffn layer contributions"
+        )
+        self.parser.add_argument(
+            "--mup.attn_temp", type=float, default=0.0, help="Compensator for muP 1/d attn temp"
+        )
+        self.parser.add_argument(
+            "--mup.emb_scale", type=float, default=0.0, help="Compensator for muP sqrt(d) emb scaling"
+        )
+        self.parser.add_argument(
+            "--mup.head_scale", type=float, default=0.0, help="Compensator for muP 1/sqrt(d) head scaling"
+        )
+        self.parser.add_argument(
+            "--mup.lr_dscale", type=float, default=0.0, help="Compensator for muP n-D LR scaling"
+        )
+
         # optimizer configs
         self.parser.add_argument(
             "--optimizer.name", type=str, default="AdamW", help="Optimizer to use"

@@ -117,6 +117,12 @@ def main(job_config: JobConfig):
     model_config.norm_type = job_config.model.norm_type
     model_config.vocab_size = tokenizer.n_words
     model_config.max_seq_len = job_config.training.seq_len
+    # set muP args
+    for flag in ["mup.a_f_skew", "mup.attn_temp", "mup.emb_scale", "mup.head_scale"]:
+        job_val = getattr(job_config, flag)
+        flag_ = "mup_"+flag[4:]
+        if job_val > 0:
+            setattr(model_config, flag_, job_val)
 
     logger.info(f"Building {model_name} {job_config.model.flavor} with {model_config}")
     with torch.device("meta"):
@@ -184,7 +190,18 @@ def main(job_config: JobConfig):
     )
 
     # build optimizer after applying parallelisms to the model
-    optimizers = build_optimizers(model_parts, job_config)
+    params_0d = [p for name, p in model.named_parameters() if "bias" in name or "_norm" in name]
+    params_1d = [p for name, p in model.named_parameters() if "embeddings" in name]
+    params_2d = [p for name, p in model.named_parameters() if sum([w in name for w in ["wq","wk","wv","wo","w1","w2","w3"]])]
+    assert len(params_0d) + len(params_1d) + len(params_2d) == len(list(model.parameters()))
+    pgroups = [params_0d, params_1d, params_2d]
+    d = model.model_args.dim
+    lrs = [
+        job_config.optimizer.lr / job_config.mup.lr_dscale,
+        job_config.optimizer.lr / d**.5,
+        job_config.optimizer.lr * job_config.mup.lr_dscale / d,
+    ]
+    optimizers = build_optimizers(pgroups, lrs, job_config)
     lr_schedulers = build_lr_schedulers(optimizers.optimizers, job_config)
 
     train_state = TrainState()

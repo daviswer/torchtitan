@@ -12,14 +12,13 @@ from torchtitan.config_manager import JobConfig
 
 
 # consider split between PP and non-PP
-def build_optimizers(model_parts, job_config: JobConfig):
-    """Wrap one optimizer per model part in an OptimizersContainer which provides a single
+def build_optimizers(pgroups, lrs, job_config: JobConfig):
+    """Wrap one optimizer per param group in an OptimizersContainer which provides a single
     step() and zero_grad() method for all the child optimizers.
     """
 
-    def _build_optimizer(model):
+    def _build_optimizer(pgroup, lr):
         name = job_config.optimizer.name
-        lr = job_config.optimizer.lr
         fused = job_config.optimizer.fused
 
         # Common parameters for both optimizers
@@ -32,9 +31,9 @@ def build_optimizers(model_parts, job_config: JobConfig):
         }
         if name == "Adam":
             # TODO: make the optimizer options configurable by toml/cmd args
-            optimizer = torch.optim.Adam(model.parameters(), **optimizer_kwargs)
+            optimizer = torch.optim.Adam(pgroup, **optimizer_kwargs)
         elif name == "AdamW":
-            optimizer = torch.optim.AdamW(model.parameters(), **optimizer_kwargs)
+            optimizer = torch.optim.AdamW(pgroup, **optimizer_kwargs)
         else:
             raise NotImplementedError(f"Optimizer {name} not added.")
 

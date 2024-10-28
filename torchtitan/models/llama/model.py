@@ -35,6 +35,22 @@ class ModelArgs:
     depth_init: bool = True
     norm_type: str = "rmsnorm"
 
+    # muP values
+    #   - Comments are: Left, our formula, Right, target
+    #   - Values calculated based on TinyLlama (init=.02, d=1024, head_d=128, growf=8/3)
+    mup_head_scale: float = 32.0  # 1/sqrt(d) * f  =  1
+    mup_attn_temp: float = 11.314  # 1/d * f  =  1/sqrt(d)  (d is head dim here)
+    # mup_attn_gain: float = 0.4096  # f  =  (.02*sqrt(d))**2
+    # mup_ffn_gain: float = 0.3027  # f  =  (.02*sqrt(d)/sqrt(2)) * (.02*sqrt(d)) * (.02*sqrt(d*growf))
+    # residual_downscale = 0.35212  # sqrt(attn_gain * ffn_gain)
+    # attn_gain = downscale*sqrt(skew)
+    # ffn_gain = downscale/sqrt(skew)
+    mup_a_f_skew: float = 1.35316  # (attn_gain / ffn_gain)
+    # set residual_downscale to 1, adjust emb scale and dscale to compensate
+    mup_emb_scale: float = 0.0568  # f  =  .02 / residual_downscale
+    # 2d weights are scaled to .02 / residual_downscale. Adjust LR same (don't worry about LN LR)
+    mup_lr_dscale: float = 90.8781 # 1/sqrt(d) * f = 1 / residual_downscale
+
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Tensor:
     """
@@ -164,11 +180,19 @@ class Attention(nn.Module):
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
         )
+        self.mup_scale = model_args.mup_a_f_skew**.5
+        self.emb_dim = model_args.dim
+        self.attn_scale = model_args.mup_attn_temp
 
     def init_weights(self, init_std: float):
-        for linear in (self.wq, self.wk, self.wv):
-            nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
-        nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
+        for linear in (self.wq, self.wk, self.wv, self.wo):
+            nn.init.normal_(
+                linear.weight,
+                mean=0.0,
+                std=(init_std * self.mup_scale) ** .5
+                / self.emb_dim ** .5
+                / (self.n_heads * self.head_dim / self.emb_dim) ** .25
+            )
 
     def forward(
         self,
@@ -207,7 +231,7 @@ class Attention(nn.Module):
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
         # we use casual mask for training
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True)
+        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True, scale=self.attn_scale/self.head_dim)
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
@@ -237,6 +261,7 @@ class FeedForward(nn.Module):
         dim: int,
         hidden_dim: int,
         multiple_of: int,
+        init_scale: float,
         ffn_dim_multiplier: Optional[float],
     ):
         super().__init__()
@@ -245,6 +270,9 @@ class FeedForward(nn.Module):
         if ffn_dim_multiplier is not None:
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+        self.init_scale = init_scale
+        self.dim = dim
+        self.hidden_dim = hidden_dim
 
         self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
@@ -254,9 +282,14 @@ class FeedForward(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
     def init_weights(self, init_std: float):
-        nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.02)
-        for linear in (self.w2, self.w3):
-            nn.init.trunc_normal_(linear.weight, mean=0.0, std=init_std)
+        for linear in (self.w1, self.w2, self.w3):
+            nn.init.normal_(
+                linear.weight,
+                mean=0.0,
+                std=(init_std*self.init_scale) ** (1/3)
+                / self.dim**.5
+                / (self.hidden_dim / self.dim / 2) ** (1/6)
+            )
 
 
 class TransformerBlock(nn.Module):
@@ -288,6 +321,7 @@ class TransformerBlock(nn.Module):
             dim=model_args.dim,
             hidden_dim=4 * model_args.dim,
             multiple_of=model_args.multiple_of,
+            init_scale=model_args.mup_a_f_skew**-0.5,
             ffn_dim_multiplier=model_args.ffn_dim_multiplier,
         )
         self.layer_id = layer_id
@@ -301,9 +335,9 @@ class TransformerBlock(nn.Module):
         )
 
         if model_args.depth_init:
-            self.weight_init_std = 0.02 / (2 * (self.layer_id + 1)) ** 0.5
+            self.weight_init_std = 1 / (2 * (self.layer_id + 1)) ** 0.5
         else:
-            self.weight_init_std = 0.02 / (2 * self.num_layers) ** 0.5
+            self.weight_init_std = 1 / (2 * self.num_layers) ** 0.5
 
     def forward(
         self,
@@ -372,11 +406,11 @@ class Transformer(nn.Module):
         for layer_id in range(model_args.n_layers):
             self.layers[str(layer_id)] = TransformerBlock(layer_id, model_args)
 
-        self.norm = build_norm(
+        self.stem_norm = build_norm(
             model_args.norm_type, dim=model_args.dim, eps=model_args.norm_eps
         )
 
-        self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
+        self.tok_unembeddings = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
         self.init_weights()
 
     def init_weights(self):
@@ -394,17 +428,17 @@ class Transformer(nn.Module):
         with torch.device(self.freqs_cis.device):
             self.freqs_cis = self._precompute_freqs_cis()
         if self.tok_embeddings is not None:
-            nn.init.normal_(self.tok_embeddings.weight)
+            nn.init.normal_(self.tok_embeddings.weight, mean=0.0, std=self.model_args.dim**-0.5)
         for layer in self.layers.values():
             if layer is not None:
                 layer.init_weights()
-        if self.norm is not None:
-            self.norm.reset_parameters()
+        if self.stem_norm is not None:
+            self.stem_norm.reset_parameters()
         final_out_std = self.model_args.dim**-0.5
         cutoff_factor = 3
-        if self.output is not None:
+        if self.tok_unembeddings is not None:
             nn.init.trunc_normal_(
-                self.output.weight,
+                self.tok_unembeddings.weight,
                 mean=0.0,
                 std=final_out_std,
                 a=-cutoff_factor * final_out_std,
@@ -435,11 +469,13 @@ class Transformer(nn.Module):
         # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
         h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
 
+        h = h * (self.model_args.mup_emb_scale * self.model_args.dim**.5)
         for layer in self.layers.values():
             h = layer(h, self.freqs_cis)
 
-        h = self.norm(h) if self.norm else h
-        output = self.output(h) if self.output else h
+        h = self.stem_norm(h) if self.stem_norm else h
+        h = h * (self.model_args.mup_head_scale / self.model_args.dim**.5)
+        output = self.tok_unembeddings(h) if self.tok_unembeddings else h
         return output
 
     @classmethod
