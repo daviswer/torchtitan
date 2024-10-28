@@ -60,6 +60,7 @@ file_type = "arrow"
 col_name = "tokens"
 
 [experimental]
+context_parallel_degree = 1
 pipeline_parallel_degree = 1
 enable_async_tensor_parallel = false
 
