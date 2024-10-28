@@ -197,9 +197,9 @@ def main(job_config: JobConfig):
     pgroups = [params_0d, params_1d, params_2d]
     d = model.model_args.dim
     lrs = [
-        job_config.optimizer.lr / job_config.mup.lr_dscale,
+        job_config.optimizer.lr / model.model_args.mup_lr_dscale,
         job_config.optimizer.lr / d**.5,
-        job_config.optimizer.lr * job_config.mup.lr_dscale / d,
+        job_config.optimizer.lr * model.model_args.mup_lr_dscale / d,
     ]
     optimizers = build_optimizers(pgroups, lrs, job_config)
     lr_schedulers = build_lr_schedulers(optimizers.optimizers, job_config)
