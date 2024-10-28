@@ -118,9 +118,9 @@ def main(job_config: JobConfig):
     model_config.vocab_size = tokenizer.n_words
     model_config.max_seq_len = job_config.training.seq_len
     # set muP args
-    for flag in ["mup.a_f_skew", "mup.attn_temp", "mup.emb_scale", "mup.head_scale"]:
-        job_val = getattr(job_config, flag)
-        flag_ = "mup_"+flag[4:]
+    for flag in ["a_f_skew", "attn_temp", "emb_scale", "head_scale"]:
+        job_val = getattr(job_config.mup, flag)
+        flag_ = "mup_"+flag
         if job_val > 0:
             setattr(model_config, flag_, job_val)
 
