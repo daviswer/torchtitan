@@ -35,21 +35,37 @@ class ModelArgs:
     depth_init: bool = True
     norm_type: str = "rmsnorm"
 
+    # # muP values
+    # #   - Comments are: Left, our formula, Right, target
+    # #   - Values calculated based on TinyLlama (init=.02, d=1024, head_d=128, growf=8/3)
+    # mup_head_scale: float = 32.0  # 1/sqrt(d) * f  =  1
+    # mup_attn_temp: float = 11.314  # 1/d * f  =  1/sqrt(d)  (d is head dim here)
+    # # mup_attn_gain: float = 0.4096  # f  =  (.02*sqrt(d))**2
+    # # mup_ffn_gain: float = 0.3027  # f  =  (.02*sqrt(d)/sqrt(2)) * (.02*sqrt(d)) * (.02*sqrt(d*growf))
+    # # residual_downscale = 0.35212  # sqrt(attn_gain * ffn_gain)
+    # # attn_gain = downscale*sqrt(skew)
+    # # ffn_gain = downscale/sqrt(skew)
+    # mup_a_f_skew: float = 1.35316  # (attn_gain / ffn_gain)
+    # # set residual_downscale to 1, adjust emb scale and dscale to compensate
+    # mup_emb_scale: float = 0.0568  # f  =  .02 / residual_downscale
+    # # 2d weights are scaled to .02 / residual_downscale. Adjust LR same (don't worry about LN LR)
+    # mup_lr_dscale: float = 90.8781 # 1/sqrt(d) * f = 1 / residual_downscale
+
     # muP values
     #   - Comments are: Left, our formula, Right, target
-    #   - Values calculated based on TinyLlama (init=.02, d=1024, head_d=128, growf=8/3)
-    mup_head_scale: float = 32.0  # 1/sqrt(d) * f  =  1
-    mup_attn_temp: float = 11.314  # 1/d * f  =  1/sqrt(d)  (d is head dim here)
-    # mup_attn_gain: float = 0.4096  # f  =  (.02*sqrt(d))**2
-    # mup_ffn_gain: float = 0.3027  # f  =  (.02*sqrt(d)/sqrt(2)) * (.02*sqrt(d)) * (.02*sqrt(d*growf))
-    # residual_downscale = 0.35212  # sqrt(attn_gain * ffn_gain)
+    #   - Values calculated based on DebugModel (init=.02, d=256, head_d=16, growf=3)
+    mup_head_scale: float = 16.0  # 1/sqrt(d) * f  =  1
+    mup_attn_temp: float = 4.0  # 1/d * f  =  1/sqrt(d)  (d is head dim here)
+    # mup_attn_gain: float = 0.1024  # f  =  (.02*sqrt(d))**2
+    # mup_ffn_gain: float = 0.04013  # f  =  (.02*sqrt(d)/sqrt(2)) * (.02*sqrt(d)) * (.02*sqrt(d*growf))
+    # residual_downscale = 0.0641  # sqrt(attn_gain * ffn_gain)
     # attn_gain = downscale*sqrt(skew)
     # ffn_gain = downscale/sqrt(skew)
-    mup_a_f_skew: float = 1.35316  # (attn_gain / ffn_gain)
+    mup_a_f_skew: float = 2.5516  # (attn_gain / ffn_gain)
     # set residual_downscale to 1, adjust emb scale and dscale to compensate
-    mup_emb_scale: float = 0.0568  # f  =  .02 / residual_downscale
+    mup_emb_scale: float = 0.312  # f  =  .02 / residual_downscale
     # 2d weights are scaled to .02 / residual_downscale. Adjust LR same (don't worry about LN LR)
-    mup_lr_dscale: float = 90.8781 # 1/sqrt(d) * f = 1 / residual_downscale
+    mup_lr_dscale: float = 249.61 # 1/sqrt(d) * f = 1 / residual_downscale
 
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Tensor:
