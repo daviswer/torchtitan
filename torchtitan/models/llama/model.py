@@ -63,7 +63,7 @@ class ModelArgs:
     # ffn_gain = downscale/sqrt(skew)
     mup_a_f_skew: float = 2.5516  # (attn_gain / ffn_gain)
     # set residual_downscale to 1, adjust emb scale and dscale to compensate
-    mup_emb_scale: float = 0.312  # f  =  .02 / residual_downscale
+    mup_emb_scale: float = 15.6  # f  =  1 / residual_downscale
     # 2d weights are scaled to .02 / residual_downscale. Adjust LR same (don't worry about LN LR)
     mup_lr_dscale: float = 249.61 # 1/sqrt(d) * f = 1 / residual_downscale
 
