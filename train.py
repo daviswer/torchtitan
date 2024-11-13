@@ -87,8 +87,6 @@ def main(job_config: JobConfig):
 
     model_name = job_config.model.name
 
-    # build tokenizer
-
     # build dataloader
     if job_config.dataset.use_experimental_dataloader:
         tokenizer = AutoTokenizer.from_pretrained(job_config.model.tokenizer_path)
@@ -119,7 +117,10 @@ def main(job_config: JobConfig):
     # 2. vocab size from tokenizer
     # 3. max_seq_len base on inputs
     model_config.norm_type = job_config.model.norm_type
-    model_config.vocab_size = tokenizer.n_words
+    model_config.vocab_size = (
+        len(tokenizer.vocab) if job_config.dataset.use_experimental_dataloader 
+        else tokenizer.n_words
+    )
     model_config.max_seq_len = job_config.training.seq_len
     # set muP args
     for flag in ["a_f_skew", "attn_temp", "emb_scale", "head_scale"]:
