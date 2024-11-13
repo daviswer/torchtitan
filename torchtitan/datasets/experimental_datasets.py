@@ -400,13 +400,20 @@ class ParquetHandler(_ShardFileHandler):
         return "parquet" in os.path.splitext(filepath)[1]
 
     def open(self, path: str):
-        return pq.read_pandas(path, columns=[self.col_name])[self.col_name]
+        colnames = pq.read_metadata(path).schema.names
+        legal_fields = ["text", "content", "contents"]
+        overlap = set(legal_fields).intersection(set(colnames))
+        assert (
+            len(overlap) == 1
+        ), f"{len(overlap)} shared column names detected, need 1 ({overlap})"
+        name = overlap.pop()
+        return pq.read_pandas(path, columns=[name], partitioning=None)[name]
 
     def length(self, path: str):
-        return pq.read_pandas(path, columns=[]).num_rows
+        return pq.read_metadata(path).num_rows
 
     def get(self, reader, index: int, drop_tokens: Set):
-        doc = self.tokenizer.encode(str(reader[index]))
+        doc = self.tokenizer.encode(str(reader[index])[:128_000])
         if len(doc) > 0:
             if doc[0] in drop_tokens:
                 doc = doc[1:]
@@ -883,17 +890,8 @@ class StreamingDocDataset(_StatefulDataset):
                 if self.filehandler.is_legal(os.path.join(root, name))
             ]
             shards.sort()  # Ensure consistent sharding across machines
-            start_frag = (self.rank * self.worldsize * len(shards)) // self.worldsize
-            end_frag = (
-                (self.rank + 1) * self.worldsize * len(shards)
-            ) // self.worldsize
-            shardfrags = [
-                (shards[i // self.worldsize], i % self.worldsize)
-                for i in range(start_frag, end_frag)
-            ]
 
-            # Assemble length of each owned shard file
-
+            # Find metadata file
             countfiles = []
             if os.path.exists(os.path.join(pardir, "meta")):
                 countfiles = [
@@ -901,55 +899,77 @@ class StreamingDocDataset(_StatefulDataset):
                     for x in os.listdir(os.path.join(pardir, "meta"))
                     if "counts" in x and "csv" in x
                 ]
-            doc_counts = {}
             if len(countfiles) > 0:
                 # Count file exists, use it
                 countpath = os.path.join(pardir, "meta", countfiles[0])
+            else:
+                countpath = ""
+
+            # Use shard file sizes to perform partitioning
+            # Create shardlist of form shardid -> [start%, end%]
+            if len(countfiles) > 0:
+                sizes = {}
                 with open(countpath, "r") as csvfile:
                     reader = csv.DictReader(csvfile)
                     for row in reader:
                         fullpath = row["dataset/filename"]
-                        prefix = fullpath.find("/" + dataset) + 1
-                        if prefix > 0:
+                        prefix = fullpath.find(dataset + "/")
+                        if prefix >= 0:
+                            key = fullpath[prefix + len(dataset) + 1 :]
+                            sizes[key] = int(row["size"])
+                shard_sizes = [sizes[shard] for shard in shards]
+            else:
+                shard_sizes = [
+                    os.path.getsize(os.path.join(datapath, shard)) for shard in shards
+                ]
+            shard_sizes = [s / sum(shard_sizes) for s in shard_sizes]
+            start = self.rank / self.worldsize
+            end = (self.rank + 1) / self.worldsize
+            shardset = {}
+            tally = 0
+            for i in range(len(shards)):
+                if tally <= end and tally + shard_sizes[i] >= start:
+                    shardset[shards[i]] = [
+                        min(max((start - tally) / shard_sizes[i], 0), 1),
+                        min(max((end - tally) / shard_sizes[i], 0), 1),
+                    ]
+                tally += shard_sizes[i]
+
+            # Assemble length of each owned shard file
+            doc_counts = {}
+            if len(countfiles) > 0:
+                # Count file exists, use it
+                with open(countpath, "r") as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        fullpath = row["dataset/filename"]
+                        prefix = fullpath.find(dataset + "/")
+                        if prefix >= 0:
                             key = fullpath[prefix + len(dataset) + 1 :]
                             doc_counts[key] = int(row["documents"])
             else:
                 # Count file does not exist, touch every owned file for length
-                unique_shardfiles = set(shard for shard, frag in shardfrags)
+                # unique_shardfiles = set(shard for shard, frag in shardfrags)
                 doc_counts = {
                     shard: self.filehandler.length(os.path.join(datapath, shard))
-                    for shard in unique_shardfiles
+                    for shard in shardset
                 }
 
-            # Read shardfrags, assemble doc list for each file shard (aggregating over fragments):
-            ndocs = -1
-            docset = {}  # shardid -> (min docid, max docid)
-            for i, (shard, frag) in enumerate(shardfrags):
-                ndocs = doc_counts[shard]
-                doc_start = (ndocs * frag) // self.worldsize
-                doc_end = (
-                    ndocs * frag + ndocs
-                ) // self.worldsize - 1  # Inclusive upper bound
-                if shard not in docset:
-                    docset[shard] = [doc_start, doc_end]
-                min_d, max_d = docset[shard]
-                if doc_start < min_d:
-                    docset[shard][0] = doc_start
-                if doc_end > max_d:
-                    docset[shard][1] = doc_end
-
-            # Add shard entries to self.docset
+            # Assemble doc list for each file shard
+            # Create docset of form [shardid, min docid, max docid]
             doccount = 0
-            for shardid in docset:
-                min_d = docset[shardid][0]
-                max_d = docset[shardid][1]
-                self.docset.append((shardid, min_d, max_d))
-                doccount += max_d - min_d + 1
+            for shard in shardset:
+                ndocs = doc_counts[shard]
+                doc_start = round(ndocs * shardset[shard][0])
+                doc_end = round(ndocs * shardset[shard][1]) - 1  # inclusive upper bound
+                if doc_end >= doc_start:
+                    self.docset.append([shard, doc_start, doc_end])
+                    doccount += doc_end - doc_start + 1
             self._len = doccount
 
             if self.verbose:
                 logging.info(
-                    f"    Worker {self.rank} ingested {len(shardfrags)} shard fragments from {dataset}"
+                    f"    Worker {self.rank} ingested {len(self.docset)} shards from {dataset}"
                 )
 
             # Shuffle shard files - guaranteed inconsistent across workers
