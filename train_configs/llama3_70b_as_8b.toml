@@ -26,6 +26,7 @@ name = "AdamW"
 lr = 3e-4
 
 [training]
+dataset_path = "/gpfs/dolma_v1_7/"
 batch_size = 4
 seq_len = 4096
 warmup_steps = 1000  # lr scheduler warm up
@@ -42,7 +43,6 @@ use_experimental_dataloader = true
 data_logical_shards = 768
 bos_token = 128000
 eos_token = 128001
-dataset_path = "/gpfs/dolma_v1_7/"
 datasets = "dataset=cc_en_head"
 # datasets = "CommonCrawl,C4,Github,Wikipedia,Books,ArXiv,StackExchange"
 # dataset_weights = "67,15,4.5,4.5,4.5,2.5,2"
