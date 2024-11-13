@@ -1450,7 +1450,7 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
     
     # Base reader layer
     data = StreamingDocDataset(
-        cfg.dataset.dataset_path,
+        cfg.training.dataset_path,
         rank,
         world_size,
         filehandler,
@@ -1468,7 +1468,7 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
     )
     # Add multi-dataset handling
     data = SamplingDataset(
-        cfg.dataset.dataset_path,
+        cfg.training.dataset_path,
         data,
         cfg.dataset.eos_token,
         datasets=datasets,
