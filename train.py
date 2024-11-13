@@ -95,6 +95,7 @@ def main(job_config: JobConfig):
             job_config,
             dp_rank,
             dp_degree,
+            None if job_config.dataset.data_type=="arrow" else tokenizer,
         )
     else:
         data_loader = build_hf_data_loader(
