@@ -28,6 +28,8 @@ from torchtitan.parallelisms import (
 )
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 
+from transformers import AutoTokenizer
+
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
@@ -86,11 +88,10 @@ def main(job_config: JobConfig):
     model_name = job_config.model.name
 
     # build tokenizer
-    tokenizer_type = model_name_to_tokenizer[model_name]
-    tokenizer = build_tokenizer(tokenizer_type, job_config.model.tokenizer_path)
 
     # build dataloader
     if job_config.dataset.use_experimental_dataloader:
+        tokenizer = AutoTokenizer.from_pretrained(job_config.model.tokenizer_path)
         data_loader = build_experimental_data_loader(
             job_config,
             dp_rank,
@@ -98,6 +99,8 @@ def main(job_config: JobConfig):
             None if job_config.dataset.file_type=="arrow" else tokenizer,
         )
     else:
+        tokenizer_type = model_name_to_tokenizer[model_name]
+        tokenizer = build_tokenizer(tokenizer_type, job_config.model.tokenizer_path)
         data_loader = build_hf_data_loader(
             job_config.training.dataset,
             job_config.training.dataset_path,
