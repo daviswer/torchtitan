@@ -31,7 +31,7 @@ class ModelArgs:
 
     max_seq_len: int = 2048
     # If `True`, then each transformer block init uses its layer ID, and if
-    # `False`, each uses the total number of transformer blocks
+    # `False`, each uses 1 (was the total number of transformer blocks)
     depth_init: bool = True
     norm_type: str = "rmsnorm"
 
@@ -353,7 +353,7 @@ class TransformerBlock(nn.Module):
         if model_args.depth_init:
             self.weight_init_std = 1 / (2 * (self.layer_id + 1)) ** 0.5
         else:
-            self.weight_init_std = 1 / (2 * self.num_layers) ** 0.5
+            self.weight_init_std = 1 #/ (2 * self.num_layers) ** 0.5
 
     def forward(
         self,

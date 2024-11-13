@@ -48,6 +48,16 @@ llama3_configs = {
         multiple_of=1024,
         rope_theta=500000,
     ),
+    "70B-as-8B": ModelArgs(
+        dim=3172,
+        n_layers=80,
+        n_heads=24,
+        n_kv_heads=6,
+        ffn_dim_multiplier=1.3,
+        multiple_of=256,
+        rope_theta=500000,
+        depth_init=False,
+    ),
     "70B": ModelArgs(
         dim=8192,
         n_layers=80,
