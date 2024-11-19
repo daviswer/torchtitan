@@ -123,7 +123,7 @@ def main(job_config: JobConfig):
     )
     model_config.max_seq_len = job_config.training.seq_len
     # set muP args
-    for flag in ["a_f_skew", "attn_temp", "emb_scale", "head_scale"]:
+    for flag in ["a_f_skew", "attn_temp", "emb_scale", "head_scale", "lr_dscale"]:
         job_val = getattr(job_config.mup, flag)
         flag_ = "mup_"+flag
         if job_val > 0:
