@@ -373,11 +373,10 @@ class ArrowHandler(_ShardFileHandler):
 
     def get(self, reader: pa.RecordBatchFileReader, index: int, drop_tokens: Set):
         doc = reader.get_batch(index)[self.col_name]
-        if len(doc) > 0:
-            if doc[0].as_py() in drop_tokens:
-                doc = doc.slice(1, len(doc) - 1)
-            if doc[-1].as_py() in drop_tokens:
-                doc = doc.slice(0, len(doc) - 1)
+        if len(doc) > 0 and doc[0].as_py() in drop_tokens:
+            doc = doc.slice(1, len(doc) - 1)
+        if len(doc) > 0 and doc[-1].as_py() in drop_tokens:
+            doc = doc.slice(0, len(doc) - 1)
         return doc
 
     def slice(self, doc: pa.UInt32Array, index: int, n_pull: int) -> List:
@@ -414,11 +413,10 @@ class ParquetHandler(_ShardFileHandler):
 
     def get(self, reader, index: int, drop_tokens: Set):
         doc = self.tokenizer.encode(str(reader[index])[:128_000])
-        if len(doc) > 0:
-            if doc[0] in drop_tokens:
-                doc = doc[1:]
-            if doc[-1] in drop_tokens:
-                doc = doc[:-1]
+        if len(doc) > 0 and doc[0] in drop_tokens:
+            doc = doc[1:]
+        if len(doc) > 0 and doc[-1] in drop_tokens: # Recheck len for edge case where doc=[eos]
+            doc = doc[:-1]
         return doc
 
     def slice(self, doc: List, index: int, n_pull: int) -> List:
