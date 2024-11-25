@@ -196,19 +196,11 @@ class Attention(nn.Module):
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
         )
-        self.mup_scale = model_args.mup_a_f_skew**.5
-        self.emb_dim = model_args.dim
-        self.attn_scale = model_args.mup_attn_temp
 
     def init_weights(self, init_std: float):
-        for linear in (self.wq, self.wk, self.wv, self.wo):
-            nn.init.normal_(
-                linear.weight,
-                mean=0.0,
-                std=(init_std * self.mup_scale) ** .5
-                / self.emb_dim ** .5
-                / (self.n_heads * self.head_dim / self.emb_dim) ** .25
-            )
+        for linear in (self.wq, self.wk, self.wv):
+            nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
+        nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
 
     def forward(
         self,
@@ -247,7 +239,7 @@ class Attention(nn.Module):
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
         # we use casual mask for training
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True, scale=self.attn_scale/self.head_dim)
+        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True)
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
@@ -277,7 +269,6 @@ class FeedForward(nn.Module):
         dim: int,
         hidden_dim: int,
         multiple_of: int,
-        init_scale: float,
         ffn_dim_multiplier: Optional[float],
     ):
         super().__init__()
@@ -286,9 +277,6 @@ class FeedForward(nn.Module):
         if ffn_dim_multiplier is not None:
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-        self.init_scale = init_scale
-        self.dim = dim
-        self.hidden_dim = hidden_dim
 
         self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
@@ -298,14 +286,9 @@ class FeedForward(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
     def init_weights(self, init_std: float):
-        for linear in (self.w1, self.w2, self.w3):
-            nn.init.normal_(
-                linear.weight,
-                mean=0.0,
-                std=(init_std*self.init_scale) ** (1/3)
-                / self.dim**.5
-                / (self.hidden_dim / self.dim / 2) ** (1/6)
-            )
+        nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.02)
+        for linear in (self.w2, self.w3):
+            nn.init.trunc_normal_(linear.weight, mean=0.0, std=init_std)
 
 
 class TransformerBlock(nn.Module):
@@ -337,7 +320,6 @@ class TransformerBlock(nn.Module):
             dim=model_args.dim,
             hidden_dim=4 * model_args.dim,
             multiple_of=model_args.multiple_of,
-            init_scale=model_args.mup_a_f_skew**-0.5,
             ffn_dim_multiplier=model_args.ffn_dim_multiplier,
         )
         self.layer_id = layer_id
@@ -351,9 +333,9 @@ class TransformerBlock(nn.Module):
         )
 
         if model_args.depth_init:
-            self.weight_init_std = 1 / (2 * (self.layer_id + 1)) ** 0.5
+            self.weight_init_std = 0.02 / (2 * (self.layer_id + 1)) ** 0.5
         else:
-            self.weight_init_std = 1 #/ (2 * self.num_layers) ** 0.5
+            self.weight_init_std = 0.02 / (2 * self.num_layers) ** 0.5
 
     def forward(
         self,
@@ -422,11 +404,11 @@ class Transformer(nn.Module):
         for layer_id in range(model_args.n_layers):
             self.layers[str(layer_id)] = TransformerBlock(layer_id, model_args)
 
-        self.stem_norm = build_norm(
+        self.norm = build_norm(
             model_args.norm_type, dim=model_args.dim, eps=model_args.norm_eps
         )
 
-        self.tok_unembeddings = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
+        self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
         self.init_weights()
 
     def init_weights(self):
@@ -444,17 +426,17 @@ class Transformer(nn.Module):
         with torch.device(self.freqs_cis.device):
             self.freqs_cis = self._precompute_freqs_cis()
         if self.tok_embeddings is not None:
-            nn.init.normal_(self.tok_embeddings.weight, mean=0.0, std=self.model_args.dim**-0.5)
+            nn.init.normal_(self.tok_embeddings.weight)
         for layer in self.layers.values():
             if layer is not None:
                 layer.init_weights()
-        if self.stem_norm is not None:
-            self.stem_norm.reset_parameters()
+        if self.norm is not None:
+            self.norm.reset_parameters()
         final_out_std = self.model_args.dim**-0.5
         cutoff_factor = 3
-        if self.tok_unembeddings is not None:
+        if self.output is not None:
             nn.init.trunc_normal_(
-                self.tok_unembeddings.weight,
+                self.output.weight,
                 mean=0.0,
                 std=final_out_std,
                 a=-cutoff_factor * final_out_std,
@@ -465,9 +447,8 @@ class Transformer(nn.Module):
         return precompute_freqs_cis(
             self.model_args.dim // self.model_args.n_heads,
             # Need to compute until at least the max token limit for generation
-            # TODO: explain in docs/composability.md why we removed the 2x
-            # relaxing in our CP enablement PR
-            self.model_args.max_seq_len,
+            # (use 2x max sequence length to be safe)
+            self.model_args.max_seq_len * 2,
             self.model_args.rope_theta,
         )
 
@@ -485,13 +466,11 @@ class Transformer(nn.Module):
         # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
         h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
 
-        h = h * (self.model_args.mup_emb_scale * self.model_args.dim**.5)
         for layer in self.layers.values():
             h = layer(h, self.freqs_cis)
 
-        h = self.stem_norm(h) if self.stem_norm else h
-        h = h * (self.model_args.mup_head_scale / self.model_args.dim**.5)
-        output = self.tok_unembeddings(h) if self.tok_unembeddings else h
+        h = self.norm(h) if self.norm else h
+        output = self.output(h).float() if self.output else h
         return output
 
     @classmethod
