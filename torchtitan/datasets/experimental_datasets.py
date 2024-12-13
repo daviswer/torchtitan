@@ -1512,8 +1512,8 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
         rank,
         world_size,
         filehandler,
-        cfg.dataset.eos_token,
-        bos_token=None if cfg.dataset.bos_token == -1 else cfg.dataset.bos_token,
+        100,
+        bos_token=None,
         strip_tokens=set(droplist),
         min_length=3,
         seed=42,
@@ -1530,14 +1530,14 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
     # Add rescaling/resharding
     data = ScalableShardDataset(
         data,
-        cfg.dataset.eos_token,
+        100,
         n_logical_shards=cfg.dataset.data_logical_shards,
     )
     # Add multi-dataset handling
     data = SamplingDataset(
         cfg.training.dataset_path,
         data,
-        cfg.dataset.eos_token,
+        100,
         datasets=datasets,
         weights=weights,
         verbose=(rank == 0),
