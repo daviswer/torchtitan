@@ -1520,7 +1520,7 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
         cfg.training.dataset_path,
         rank,
         world_size,
-        cfg.dataset.eos_token,
+        0,
         seed=42,
         vocab=2256,
         seqlen=1000,
