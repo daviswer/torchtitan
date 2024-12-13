@@ -1418,6 +1418,7 @@ class DummyDataset(_StatefulDataset):
         self.generator = None
         self.g_state = None
         self.state_params = ["g_state"]
+        self._len = 1000000
 
     def setup(self):
         super().setup()
