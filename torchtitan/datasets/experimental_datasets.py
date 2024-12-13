@@ -1388,6 +1388,63 @@ class SamplingDataset(_WrapperDataset):
         return sharded_dicts
 
 
+class DummyDataset(_StatefulDataset):
+    """
+    A dummy base dataset for demo purposes.
+
+    Normally this dataset would be responsible for using rank, datapath and worldsize arguments
+    to perform dataset partitioning, and implement repeating iteration over its particular data shard.
+
+    Spits out random sequences of desired vocab size / seq length as lists.
+    Places delimiter token at end of each sequence (used by SamplingDataset).
+    """
+
+    def __init__(
+        self,
+        datapath: str,
+        rank: int,
+        worldsize: int,
+        delimiter_token: Any,
+        seed: int = 42,
+        vocab: int = 100,
+        seqlen: int = 64,
+    ):
+        super().__init__(datapath, rank, worldsize)
+        self.vocab = vocab
+        self.seqlen = seqlen
+        self.delimiter = delimiter_token
+        # Ensure different seeds across ranks and datasets, for demo purposes
+        self.seed = seed
+        self.generator = None
+        self.g_state = None
+        self.state_params = ["g_state"]
+
+    def setup(self):
+        super().setup()
+        if self.generator is None:
+            self.generator = torch.Generator().manual_seed(self.seed + self.rank + len(self.datapath) * 100)
+
+    def __iter__(self):
+        self.setup()
+        while True:
+            out = torch.rand(self.seqlen, generator=self.generator)
+            out = out.mul(self.vocab).int().tolist()
+            out[-1] = self.delimiter
+            yield out
+
+    def state_dict(self):
+        self.setup()
+        # Write generator state manually
+        self.g_state = self.generator.get_state().tolist()
+        return super().state_dict()
+
+    def load_state_dict(self, state_dict):
+        super().load_state_dict(state_dict)
+        # Manually set generator state
+        self.generator.set_state(torch.tensor(self.g_state, dtype=torch.uint8))
+
+
+
 # --------------  CONSTRUCTORS  --------------
 
 
@@ -1447,16 +1504,25 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
         filehandler = _handler_map[cfg.dataset.file_type](cfg.dataset.col_name)
     
     # Base reader layer
-    data = StreamingDocDataset(
+    # data = StreamingDocDataset(
+    #     cfg.training.dataset_path,
+    #     rank,
+    #     world_size,
+    #     filehandler,
+    #     cfg.dataset.eos_token,
+    #     bos_token=None if cfg.dataset.bos_token == -1 else cfg.dataset.bos_token,
+    #     strip_tokens=set(droplist),
+    #     min_length=3,
+    #     seed=42,
+    # )
+    data = DummyDataset(
         cfg.training.dataset_path,
         rank,
         world_size,
-        filehandler,
         cfg.dataset.eos_token,
-        bos_token=None if cfg.dataset.bos_token == -1 else cfg.dataset.bos_token,
-        strip_tokens=set(droplist),
-        min_length=3,
         seed=42,
+        vocab=2256,
+        seqlen=1000,
     )
     # Add rescaling/resharding
     data = ScalableShardDataset(
