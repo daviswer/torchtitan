@@ -1084,7 +1084,7 @@ class StreamingDocDataset(_StatefulDataset):
                                 self.percent_seen = (
                                     self.docs_seen * 100 / (self._len + 1e-9)
                                 )
-                            yield torch.randint(100, 1024).tolist()
+                            yield torch.randint(100, [1024]).tolist()
                             yield self._construct_chunk(j, doc, n_chunks)
 
                 # Advance RNG state
@@ -1105,7 +1105,7 @@ class StreamingDocDataset(_StatefulDataset):
                 n_chunks = math.ceil(doclen / self.chunksize)
                 for j in range(residual_chunks):
                     self.chunk_index = j
-                    yield torch.randint(100, 1024).tolist()
+                    yield torch.randint(100, [1024]).tolist()
                     yield self._construct_chunk(j, doc, n_chunks)
 
     def load_state_dict(self, state_dicts, sharded_input=False):
