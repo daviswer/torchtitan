@@ -1084,6 +1084,7 @@ class StreamingDocDataset(_StatefulDataset):
                                 self.percent_seen = (
                                     self.docs_seen * 100 / (self._len + 1e-9)
                                 )
+                            yield torch.randint(100, 1024).tolist()
                             yield self._construct_chunk(j, doc, n_chunks)
 
                 # Advance RNG state
@@ -1104,6 +1105,7 @@ class StreamingDocDataset(_StatefulDataset):
                 n_chunks = math.ceil(doclen / self.chunksize)
                 for j in range(residual_chunks):
                     self.chunk_index = j
+                    yield torch.randint(100, 1024).tolist()
                     yield self._construct_chunk(j, doc, n_chunks)
 
     def load_state_dict(self, state_dicts, sharded_input=False):
@@ -1505,26 +1507,26 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
         filehandler = _handler_map[cfg.dataset.file_type](cfg.dataset.col_name)
     
     # Base reader layer
-    # data = StreamingDocDataset(
-    #     cfg.training.dataset_path,
-    #     rank,
-    #     world_size,
-    #     filehandler,
-    #     cfg.dataset.eos_token,
-    #     bos_token=None if cfg.dataset.bos_token == -1 else cfg.dataset.bos_token,
-    #     strip_tokens=set(droplist),
-    #     min_length=3,
-    #     seed=42,
-    # )
-    data = DummyDataset(
+    data = StreamingDocDataset(
         cfg.training.dataset_path,
         rank,
         world_size,
-        0,
+        filehandler,
+        cfg.dataset.eos_token,
+        bos_token=None if cfg.dataset.bos_token == -1 else cfg.dataset.bos_token,
+        strip_tokens=set(droplist),
+        min_length=3,
         seed=42,
-        vocab=2256,
-        seqlen=1000,
     )
+    # data = DummyDataset(
+    #     cfg.training.dataset_path,
+    #     rank,
+    #     world_size,
+    #     0,
+    #     seed=42,
+    #     vocab=2256,
+    #     seqlen=1000,
+    # )
     # Add rescaling/resharding
     data = ScalableShardDataset(
         data,
