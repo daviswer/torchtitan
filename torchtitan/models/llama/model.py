@@ -284,11 +284,13 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         z = self.w3(x)
-        s = z.size()
-        d2 = s[-1]//2
-        z = z.view(s[0], -1).roll(d2, 1)
-        z[:,:d2] = 0
-        z = z.view(*s)
+        # s = z.size()
+        # d2 = s[-1]//2
+        # z = z.view(s[0], -1).roll(d2, 1)
+        # z[:,:d2] = 0
+        # z = z.view(*s)
+        z = z.roll(1,1)
+        z[:,0] = 1
         return self.w2(F.silu(self.w1(x)) * z)
 
     def init_weights(self, init_std: float):
