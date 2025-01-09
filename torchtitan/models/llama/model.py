@@ -283,6 +283,12 @@ class FeedForward(nn.Module):
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
 
     def forward(self, x):
+        # x: b l d
+        s = x.size()
+        d2 = s[-1]//2
+        x = x.view(s[0], -1).roll(d2, 1)
+        x[:,:d2] = 0
+        x = x.view(*s)
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
     def init_weights(self, init_std: float):
