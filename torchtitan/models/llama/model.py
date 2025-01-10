@@ -16,6 +16,8 @@ import torch.nn.functional as F
 from torch import nn
 from torchtitan.models.norms import build_norm
 
+from causal_conv1d import causal_conv1d_fn
+
 
 @dataclass
 class ModelArgs:
@@ -281,20 +283,23 @@ class FeedForward(nn.Module):
         self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
+        self.conv = nn.Parameter(torch.empty(model_args.dim, 4))
 
     def forward(self, x):
-        z = x
-        s = z.size()
-        d2 = s[-1]//2
-        z = z.view(s[0], -1).roll(d2, 1)
-        z[:,:d2] = 0
-        z = z.view(*s)
+        # z = x
+        # s = z.size()
+        # d2 = s[-1]//2
+        # z = z.view(s[0], -1).roll(d2, 1)
+        # z[:,:d2] = 0
+        # z = z.view(*s)
+        z = causal_conv1d_fn(x.transpose(1,2), self.conv).transpose(1,2)
         return self.w2(F.silu(self.w1(x)) * self.w3(z))
 
     def init_weights(self, init_std: float):
         nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.02)
         for linear in (self.w2, self.w3):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=init_std)
+        nn.init.trunc_normal_(self.conv, mean=0, std=.02)
 
 
 class TransformerBlock(nn.Module):
