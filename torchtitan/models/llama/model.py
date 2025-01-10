@@ -283,7 +283,7 @@ class FeedForward(nn.Module):
         self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
-        self.conv = nn.Parameter(torch.empty(model_args.dim, 4))
+        self.conv = nn.Parameter(torch.empty(dim, 4))
 
     def forward(self, x):
         # z = x
