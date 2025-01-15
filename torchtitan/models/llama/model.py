@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from torch import nn
 from torchtitan.models.norms import build_norm
 
-from causal_conv1d import causal_conv1d_fn
+# from causal_conv1d import causal_conv1d_fn
 
 
 @dataclass
@@ -230,7 +230,7 @@ class Attention(nn.Module):
         xk = xk.view(bs, seqlen, -1, self.head_dim)
         xv = xv.view(bs, seqlen, -1, self.head_dim)
 
-        # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
@@ -283,16 +283,16 @@ class FeedForward(nn.Module):
         self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
-        self.conv = nn.Parameter(torch.empty(dim, 4))
+        # self.conv = nn.Parameter(torch.empty(dim, 4))
 
     def forward(self, x):
-        # z = x
-        # s = z.size()
-        # d2 = s[-1]//2
-        # z = z.view(s[0], -1).roll(d2, 1)
-        # z[:,:d2] = 0
-        # z = z.view(*s)
-        z = causal_conv1d_fn(x.transpose(1,2), self.conv).transpose(1,2)
+        z = x
+        s = z.size()
+        d2 = s[-1]//2
+        z = z.view(s[0], -1).roll(d2, 1)
+        z[:,:d2] = 0
+        z = z.view(*s)
+        # z = causal_conv1d_fn(x.transpose(1,2), self.conv).transpose(1,2)
         return self.w2(F.silu(self.w1(x)) * self.w3(z))
 
     def init_weights(self, init_std: float):
