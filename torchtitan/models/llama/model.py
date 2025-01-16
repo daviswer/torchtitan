@@ -228,7 +228,7 @@ class Attention(nn.Module):
         xk = xk.view(bs, seqlen, -1, self.head_dim)
         xv = xv.view(bs, seqlen, -1, self.head_dim)
 
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
@@ -467,12 +467,12 @@ class Transformer(nn.Module):
         h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
 
         # h: b l d
-        s = h.size()
-        h = h.view(s[0],-1)
-        d2 = s[2]//2
-        h = h.roll(d2,1)
-        h[:,:d2] = 0
-        h = h.view(*s)
+        # s = h.size()
+        # h = h.view(s[0],-1)
+        # d2 = s[2]//2
+        # h = h.roll(d2,1)
+        # h[:,:d2] = 0
+        # h = h.view(*s)
 
         for layer in self.layers.values():
             h = layer(h, self.freqs_cis)
