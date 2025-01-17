@@ -201,8 +201,6 @@ class Attention(nn.Module):
         self.gn = build_norm(
             model_args.norm_type, dim=self.head_dim, eps=model_args.norm_eps
         )
-        # self.chunksize = 512
-        # self.register_buffer("maskbuffer", torch.ones(1, 1, self.chunksize, 4096, dtype=torch.bool))
 
     def init_weights(self, init_std: float):
         for linear in (self.wq, self.wk, self.wv):
@@ -248,33 +246,32 @@ class Attention(nn.Module):
         xk = keys.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
-        # Full self-pruning attention
-        affinity = xk.matmul(xk.transpose(-1,-2)).relu().to(dtype=torch.float).clamp(min=0,max=1)
-        affinity = affinity.neg().log1p().triu(1).cumsum(3).exp().triu()
-        score = F.logsigmoid(xq.matmul(xk.transpose(-1,-2)).neg()).neg() * affinity.to(dtype=torch.bfloat16)
-        output = score.matmul(xv)
+        # # Full self-pruning attention
+        # affinity = xk.matmul(xk.transpose(-1,-2)).relu().to(dtype=torch.float).clamp(min=0,max=1)
+        # affinity = affinity.neg().log1p().triu(1).cumsum(3).exp().triu()
+        # score = F.logsigmoid(xq.matmul(xk.transpose(-1,-2)).neg()).neg() * affinity.to(dtype=torch.bfloat16)
+        # output = score.matmul(xv)
 
-        # # blockwise self-pruning attention
-        # c = self.chunksize
-        # l = seqlen
-        # n = seqlen//c
-        # b = bs
-        # s = [b, -1, n, c, self.head_dim]
-        # kc = xk.view(*s)
-        # vc = xv.view(*s)
-        # output = torch.zeros_like(xv)  # b h l d
+        # blockwise self-pruning attention
+        c = self.chunksize
+        l = seqlen
+        n = seqlen//c
+        b = bs
+        s = [b, -1, n, c, self.head_dim]
+        kc = xk.view(*s)
+        vc = xv.view(*s)
+        output = torch.zeros_like(xv)  # b h l d
 
-        # for i in range(n):
-        #     k_ = kc[:,:,i]  # b h c d
-        #     kt = xk.transpose(-2,-1)  # b h d l
-        #     affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1)
-        #     affinity = torch.log1p(affinity.neg().add(1e-6))  # b h c l
-        #     affinity = affinity.masked_fill(self.maskbuffer.tril(i*c), 0)
-        #     affinity = affinity.cumsum(3).exp().masked_fill(self.maskbuffer.tril(i*c-1), 0)
-        #     score = k_.matmul(xq.transpose(-2,-1))  # b h c l
-        #     score = F.logsigmoid(score.neg()).neg() * affinity.to(dtype=torch.bfloat16)
-        #     v_ = vc[:,:,i]  # b h c d
-        #     output = output + score.transpose(-1,-2).matmul(v_)
+        for i in range(n):
+            k_ = kc[:,:,i]  # b h c d
+            kt = xk.transpose(-2,-1)  # b h d l
+            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1)
+            affinity = torch.log1p(affinity.neg().add(1e-6)).triu(i*c+1)  # b h c l
+            affinity = affinity.cumsum(3).exp().triu(i*c)
+            score = k_.matmul(xq.transpose(-2,-1))  # b h c l
+            score = F.logsigmoid(score.neg()).neg() * affinity.to(dtype=torch.bfloat16)
+            v_ = vc[:,:,i]  # b h c d
+            output = output + score.transpose(-1,-2).matmul(v_)
 
         # Reshape, project out
         output = self.gn(output)
