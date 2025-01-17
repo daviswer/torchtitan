@@ -255,20 +255,22 @@ class Attention(nn.Module):
         kc = xk.view(*s)
         vc = xv.view(*s)
         output = torch.zeros_like(xv)  # b h l d
+        maskbuffer = torch.ones(b, s[1], c, l, device=output.device, dtype=torch.bool)  # b h c l
 
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             affinity = k_.matmul(kt).relu().clamp(min=0,max=1)
             affinity = torch.log1p(affinity.neg().add(1e-6))  # b h c l
-            affinity = affinity.masked_fill(torch.ones_like(affinity).tril(i*c).bool(), 0)
-            affinity = affinity.cumsum(3).exp().masked_fill(torch.ones_like(affinity).tril(i*c-1).bool(), 0)
+            affinity = affinity.masked_fill(maskbuffer.tril(i*c), 0)
+            affinity = affinity.cumsum(3).exp().masked_fill(maskbuffer.tril(i*c-1), 0)
             score = k_.matmul(xq.transpose(-2,-1))  # b h c l
             score = F.logsigmoid(score.neg()).neg() * affinity
             v_ = vc[:,:,i]  # b h c d
             output = output + score.transpose(-1,-2).matmul(v_)
 
         # Reshape, project out
+        print(output.std().item())
         output = self.gn(output)
         output = output.transpose(
             1, 2
