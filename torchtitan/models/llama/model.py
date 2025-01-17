@@ -263,7 +263,7 @@ class Attention(nn.Module):
             print("Pre", i, affinity.min().item(), affinity.max().item())
             affinity = torch.log1p(affinity.neg().add(1e-6))  # b h c l
             print("Affinity 1", i, affinity.std().item(), 
-                  torch.log1p(torch.rand(100, device=k_.device, dtype=k_.dtype).neg().add(1e-6)).std().item())
+                  torch.log1p(torch.arange(2, device=k_.device, dtype=k_.dtype).neg().add(1e-6)))
             affinity = affinity.masked_fill(torch.ones_like(affinity).tril(i*c).bool(), 0)
             affinity = affinity.cumsum(3).exp().masked_fill(torch.ones_like(affinity).tril(i*c-1).bool(), 0)
             score = k_.matmul(xq.transpose(-2,-1))  # b h c l
