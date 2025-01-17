@@ -249,7 +249,7 @@ class Attention(nn.Module):
         b = bs
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
-        vc = v.view(*s)
+        vc = xv.view(*s)
         output = torch.zeros_like(xv)  # b h l d
 
         for i in range(n):
