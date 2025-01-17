@@ -201,7 +201,8 @@ class Attention(nn.Module):
         self.gn = build_norm(
             model_args.norm_type, dim=self.head_dim, eps=model_args.norm_eps
         )
-        self.register_buffer("maskbuffer", torch.ones(1, 1, 128, 4096, dtype=torch.bool))
+        self.chunksize = 512
+        self.register_buffer("maskbuffer", torch.ones(1, 1, self.chunksize, 4096, dtype=torch.bool))
 
     def init_weights(self, init_std: float):
         for linear in (self.wq, self.wk, self.wv):
@@ -248,7 +249,7 @@ class Attention(nn.Module):
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
         # blockwise self-pruning attention
-        c = 128
+        c = self.chunksize
         l = seqlen
         n = seqlen//c
         b = bs
