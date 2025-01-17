@@ -299,7 +299,7 @@ class FeedForward(nn.Module):
         nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.02)
         for linear in (self.w2, self.w3):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=init_std)
-        nn.init.trunc_normal_(self.conv, mean=0, std=.25)
+        # nn.init.trunc_normal_(self.conv, mean=0, std=.25)
 
 
 class TransformerBlock(nn.Module):
