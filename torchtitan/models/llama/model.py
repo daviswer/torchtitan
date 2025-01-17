@@ -259,9 +259,8 @@ class Attention(nn.Module):
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
-            affinity = k_.matmul(kt).relu()
-            print("Affinity 0", i, affinity.max().item(), affinity.min().item())
-            affinity = torch.log1p(affinity.neg().add(1e-6))  # b h c l
+            affinity = k_.matmul(kt).relu().clamp(min=0,max=1-1e-6)
+            affinity = torch.log1p(affinity.neg())  # b h c l
             print("Affinity 1", i, affinity.std())
             affinity = affinity.masked_fill(torch.ones_like(affinity).tril(i*c).bool(), 0)
             affinity = affinity.cumsum(3).exp().masked_fill(torch.ones_like(affinity).tril(i*c-1).bool(), 0)
