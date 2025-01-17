@@ -270,7 +270,6 @@ class Attention(nn.Module):
             output = output + score.transpose(-1,-2).matmul(v_)
 
         # Reshape, project out
-        print(output.std().item())
         output = self.gn(output)
         output = output.transpose(
             1, 2
