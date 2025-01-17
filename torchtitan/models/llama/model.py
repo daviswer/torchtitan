@@ -260,12 +260,12 @@ class Attention(nn.Module):
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
-            affinity = k_.matmul(kt).relu().clamp(min=0,max=1)
+            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1)
             affinity = torch.log1p(affinity.neg().add(1e-6))  # b h c l
             affinity = affinity.masked_fill(self.maskbuffer.tril(i*c), 0)
             affinity = affinity.cumsum(3).exp().masked_fill(self.maskbuffer.tril(i*c-1), 0)
             score = k_.matmul(xq.transpose(-2,-1))  # b h c l
-            score = F.logsigmoid(score.neg()).neg() * affinity
+            score = F.logsigmoid(score.neg()).neg() * affinity.to(dtype=torch.bfloat16)
             v_ = vc[:,:,i]  # b h c d
             output = output + score.transpose(-1,-2).matmul(v_)
 
