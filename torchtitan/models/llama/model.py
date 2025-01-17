@@ -230,7 +230,9 @@ class Attention(nn.Module):
         xk = xk.view(bs, seqlen, -1, self.head_dim)
         xv = xv.view(bs, seqlen, -1, self.head_dim)
 
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        # Normalize k
+        xk = xk/xk.pow(2).sum(-1).sqrt().add(1e-6)
+        # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
@@ -240,8 +242,28 @@ class Attention(nn.Module):
         xk = keys.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
-        # we use casual mask for training
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True)
+        # blockwise self-pruning attention
+        c = 128
+        l = seqlen
+        n = seqlen//c
+        b = bs
+        s = [b, -1, n, c, self.head_dim]
+        kc = xk.view(*s)
+        vc = v.view(*s)
+        output = torch.zeros_like(xv)  # b h l d
+
+        for i in range(n):
+            k_ = kc[:,:,i]  # b h c d
+            kt = xk.transpose(-2,-1)  # b h d l
+            affinity = torch.log1p(k_.matmul(kt).relu().neg())  # b h c l
+            affinity = affinity.masked_fill(torch.ones_like(affinity).tril(i*c).bool(), 0)
+            affinity = affinity.cumsum(3).exp().masked_fill(torch.ones_like(affinity).tril(i*c-1).bool(), 0)
+            score = k_.matmul(xq.transpose(-2,-1))  # b h c l
+            score = F.logsigmoid(score.neg()).neg() * affinity
+            v_ = vc[:,:,i]  # b h c d
+            output = output + score.transpose(-1,-2).matmul(v_)
+
+        # Reshape, project out
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
@@ -287,11 +309,11 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         z = x
-        s = z.size()
-        d2 = s[-1]//2
-        z = z.view(s[0], -1).roll(d2, 1)
-        z[:,:d2] = 0
-        z = z.view(*s)
+        # s = z.size()
+        # d2 = s[-1]//2
+        # z = z.view(s[0], -1).roll(d2, 1)
+        # z[:,:d2] = 0
+        # z = z.view(*s)
         # z = causal_conv1d_fn(x.transpose(1,2), self.conv).transpose(1,2)
         return self.w2(F.silu(self.w1(x)) * self.w3(z))
 
