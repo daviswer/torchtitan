@@ -254,24 +254,27 @@ class Attention(nn.Module):
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
         vc = xv.view(*s)
-        print("q,k,v", xq.std(), xk.std(), xv.std())
         output = torch.zeros_like(xv)  # b h l d
 
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             affinity = torch.log1p(k_.matmul(kt).relu().neg())  # b h c l
+            print("Affinity 1", i, affinity.std())
             affinity = affinity.masked_fill(torch.ones_like(affinity).tril(i*c).bool(), 0)
+            print("Affinity 2", i, affinity.std())
             affinity = affinity.cumsum(3).exp().masked_fill(torch.ones_like(affinity).tril(i*c-1).bool(), 0)
+            print("Affinity 3", i, affinity.std())
             score = k_.matmul(xq.transpose(-2,-1))  # b h c l
+            print("Score 1", i, score.std())
             score = F.logsigmoid(score.neg()).neg() * affinity
+            print("Score 2", i, score.std())
             v_ = vc[:,:,i]  # b h c d
             output = output + score.transpose(-1,-2).matmul(v_)
 
         # Reshape, project out
         print("Output", output.std())
         output = self.gn(output)
-        print("Postnorm", output.std())
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
