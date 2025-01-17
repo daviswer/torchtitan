@@ -198,11 +198,15 @@ class Attention(nn.Module):
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
         )
+        self.gn = build_norm(
+            model_args.norm_type, dim=self.head_dim, eps=model_args.norm_eps
+        )
 
     def init_weights(self, init_std: float):
         for linear in (self.wq, self.wk, self.wv):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
         nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
+        self.gn.reset_parameters()
 
     def forward(
         self,
@@ -264,6 +268,7 @@ class Attention(nn.Module):
             output = output + score.transpose(-1,-2).matmul(v_)
 
         # Reshape, project out
+        output = self.gn(output)
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
