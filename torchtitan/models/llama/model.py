@@ -231,7 +231,7 @@ class Attention(nn.Module):
         xv = xv.view(bs, seqlen, -1, self.head_dim)
 
         # Normalize k
-        xk = xk/xk.pow(2).sum(-1).sqrt().add(1e-6)
+        xk = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
         # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
