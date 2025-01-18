@@ -253,7 +253,7 @@ class Attention(nn.Module):
         # output = score.matmul(xv)
 
         # blockwise self-pruning attention
-        c = self.chunksize
+        c = 512
         l = seqlen
         n = seqlen//c
         b = bs
