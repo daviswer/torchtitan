@@ -269,7 +269,7 @@ class Attention(nn.Module):
             # affinity = torch.log1p(affinity.neg().add(1e-6)).triu(i*c+1)  # b h c l
             # affinity = affinity.cumsum(3).exp().triu(i*c)
             score = k_.matmul(xq.transpose(-2,-1))  # b h c l
-            score = F.logsigmoid(score.neg()).neg() #* affinity.to(dtype=torch.bfloat16)
+            score = F.logsigmoid(score.neg()).neg().triu(i*c) #* affinity.to(dtype=torch.bfloat16)
             v_ = vc[:,:,i]  # b h c d
             output = output + score.transpose(-1,-2).matmul(v_)
 
