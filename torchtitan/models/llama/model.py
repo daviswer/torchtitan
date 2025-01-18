@@ -235,8 +235,8 @@ class Attention(nn.Module):
         xv = xv.view(bs, seqlen, -1, self.head_dim)
 
         # Normalize k
-        xk = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        # xk = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
+        # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
@@ -265,10 +265,10 @@ class Attention(nn.Module):
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
-            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1)
+            affinity = k_.matmul(kt).div(self.head_dim**.5).to(dtype=torch.float).sigmoid().pow(4)
             affinity = torch.log1p(affinity.neg().add(1e-6)).triu(i*c+1)  # b h c l
             affinity = affinity.cumsum(3).exp().triu(i*c)
-            score = k_.matmul(xq.transpose(-2,-1))  # b h c l
+            score = k_.matmul(xq.transpose(-2,-1)).div(self.head_dim**.5)  # b h c l
             score = F.logsigmoid(score.neg()).neg() * affinity.to(dtype=torch.bfloat16)
             v_ = vc[:,:,i]  # b h c d
             output = output + score.transpose(-1,-2).matmul(v_)
