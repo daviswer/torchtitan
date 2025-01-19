@@ -239,12 +239,19 @@ class Attention(nn.Module):
         # Normalize k
         xk = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
         sinks = self.sinks/self.sinks.pow(2).sum(-1, True).sqrt().add(1e-6)
-        # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+
+        # Compute sink scores before rope
+        sinks = repeat_kv(sinks, self.n_rep)  # (k/v, h, d, d)
+        output = F.logsigmoid(
+            xq.matmul(sinks[0].transpose(-1,-2)).neg()  # b h l l'
+        ).neg().matmul(sinks[1]) # torch.zeros_like(xv)  # b h l d
+
+        # apply rope
+        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
         values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
-        sinks = repeat_kv(sinks, self.n_rep)  # (k/v, h, d, d)
 
         xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xk = keys.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
@@ -264,9 +271,6 @@ class Attention(nn.Module):
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
         vc = xv.view(*s)
-        output = F.logsigmoid(
-            xq.matmul(sinks[0].transpose(-1,-2)).neg()  # b h l l'
-        ).neg().matmul(sinks[1]) # torch.zeros_like(xv)  # b h l d
 
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
