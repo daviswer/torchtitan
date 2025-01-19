@@ -242,6 +242,7 @@ class Attention(nn.Module):
 
         # Compute sink scores before rope
         sinks = repeat_kv(sinks, self.n_rep)  # (k/v, h, d, d)
+        print(xq.shape, sinks.shape)
         output = F.logsigmoid(
             xq.transpose(1,2).matmul(sinks[0].transpose(-1,-2)).neg()  # b h l l'
         ).neg().matmul(sinks[1]) # torch.zeros_like(xv)  # b h l d
