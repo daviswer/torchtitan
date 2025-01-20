@@ -247,7 +247,7 @@ class Attention(nn.Module):
         ).neg().matmul(sinks[1]) # torch.zeros_like(xv)  # b h l d
 
         # apply rope
-        # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
