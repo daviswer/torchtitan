@@ -244,7 +244,7 @@ class Attention(nn.Module):
         sinks = sinks.repeat(1,self.n_rep,1,1)  # (k/v, h, d, d)
         output = F.logsigmoid(
             xq.transpose(1,2).matmul(sinks[0].transpose(-1,-2)).neg()  # b h l l'
-        ).neg().matmul(sinks[1]) # torch.zeros_like(xv)  # b h l d
+        ).neg().matmul(sinks[1].mul(self.head_dim**.5)) # torch.zeros_like(xv)  # b h l d
 
         # apply rope
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
