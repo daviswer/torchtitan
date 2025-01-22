@@ -201,13 +201,13 @@ class Attention(nn.Module):
         self.gn = build_norm(
             model_args.norm_type, dim=self.head_dim, eps=model_args.norm_eps
         )
-        self.sinks = nn.Parameter(torch.empty(2, self.n_kv_heads, self.head_dim, self.head_dim))
+        # self.sinks = nn.Parameter(torch.empty(2, self.n_kv_heads, self.head_dim, self.head_dim))
 
     def init_weights(self, init_std: float):
         for linear in (self.wq, self.wk, self.wv):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
         nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
-        nn.init.trunc_normal_(self.sinks, mean=0.0, std=0.02)
+        # nn.init.trunc_normal_(self.sinks, mean=0.0, std=0.02)
         self.gn.reset_parameters()
 
     def forward(
@@ -238,13 +238,13 @@ class Attention(nn.Module):
 
         # Normalize k
         xk = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
-        sinks = self.sinks/self.sinks.pow(2).sum(-1, True).sqrt().add(1e-6)
+        # sinks = self.sinks/self.sinks.pow(2).sum(-1, True).sqrt().add(1e-6)
 
         # Compute sink scores before rope
-        sinks = sinks.repeat(1,self.n_rep,1,1)  # (k/v, h, d, d)
-        output = F.logsigmoid(
-            xq.transpose(1,2).matmul(sinks[0].transpose(-1,-2)).neg()  # b h l l'
-        ).neg().matmul(sinks[1].mul(self.head_dim**.5)) # torch.zeros_like(xv)  # b h l d
+        # sinks = sinks.repeat(1,self.n_rep,1,1)  # (k/v, h, d, d)
+        # output = F.logsigmoid(
+        #     xq.transpose(1,2).matmul(sinks[0].transpose(-1,-2)).neg()  # b h l l'
+        # ).neg().matmul(sinks[1].mul(self.head_dim**.5)) # torch.zeros_like(xv)  # b h l d
 
         # apply rope
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
@@ -271,6 +271,7 @@ class Attention(nn.Module):
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
         vc = xv.view(*s)
+        output = torch.zeros_like(xv)  # b h l d
 
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
