@@ -283,7 +283,7 @@ class Attention(nn.Module):
             # Calculate decay
             affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
             affinity = torch.log1p(affinity.neg().add(1e-6)).triu(i*c+1)  # b h c l
-            affinity = affinity.cumsum(3).exp().triu(i*c)
+            affinity = affinity.cumsum(3).exp().triu(i*c).unsqueeze(2)  # b h 1 c l
             # Calculate attn scores
             score = k_.matmul(xq.transpose(-1,-2)).add(affinity.log().clamp(min=-1e12))  # b h r c l
             denom_ = score.logsumexp(dim=-2)  # b h r l
