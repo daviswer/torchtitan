@@ -307,7 +307,6 @@ class Attention(nn.Module):
             0, 3, 1, 2, 4
         ).contiguous()  # (bs, seqlen, n_local_heads, n_rep, head_dim)
         output = output.view(bs, seqlen, -1)
-        print(output.std())
         return self.wo(output)
 
 
@@ -482,6 +481,7 @@ class Transformer(nn.Module):
         )
 
         self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
+        print(output.std())
         self.init_weights()
 
     def init_weights(self):
