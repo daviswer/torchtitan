@@ -208,7 +208,7 @@ class Attention(nn.Module):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
         nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
         # nn.init.trunc_normal_(self.sinks, mean=0.0, std=0.02)
-        self.gn.reset_parameters()
+        # self.gn.reset_parameters()
 
     def forward(
         self,
