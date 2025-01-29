@@ -254,8 +254,8 @@ class Attention(nn.Module):
         # values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
 
         xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        xk = keys.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        xk = xk.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        xv = xv.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         
         # Split out q if n_kv_heads < n_heads
         xq = xq.view(bs, -1, self.n_rep, seqlen, self.head_dim)  # b h r l d
