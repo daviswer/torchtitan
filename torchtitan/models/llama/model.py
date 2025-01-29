@@ -299,7 +299,7 @@ class Attention(nn.Module):
         denom = torch.stack(denom, dim=0)
         total_denom = denom.logsumexp(0)
         denom = denom.sub(total_denom).exp().to(dtype=xq.dtype)
-        out = out.mul(denom.unsqueeze(-1)).sum(0)  # b h r l d
+        output = output.mul(denom.unsqueeze(-1)).sum(0)  # b h r l d
 
         # Reshape, project out
         output = self.gn(output)
