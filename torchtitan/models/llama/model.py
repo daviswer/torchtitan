@@ -281,11 +281,11 @@ class Attention(nn.Module):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             # Calculate decay
-            # affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
-            # affinity = torch.log1p(affinity.neg().add(1e-6)).triu(i*c+1)  # b h c l
-            # affinity = affinity.cumsum(3).exp().triu(i*c).unsqueeze(2)  # b h 1 c l
+            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
+            affinity = torch.log1p(affinity.neg().add(1e-6)).triu(i*c+1)  # b h c l
+            affinity = affinity.cumsum(3).exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
             # Calculate attn scores
-            score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2))#.add(affinity.log().clamp(min=-1e12))  # b h r c l
+            score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity.log())  # b h r c l
             denom_ = score.logsumexp(dim=-2)  # b h r l
             score = score.sub(denom_.unsqueeze(-2))
             # Assemble local softmax output
