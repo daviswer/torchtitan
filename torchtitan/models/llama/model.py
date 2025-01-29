@@ -250,12 +250,15 @@ class Attention(nn.Module):
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
-        keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
-        values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
+        # keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
+        # values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
 
         xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xk = keys.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        
+        # Split out q if n_kv_heads < n_heads
+        xq = xq.view(bs, -1, self.n_rep, seqlen, self.head_dim)  # b h r l d
 
         # # Full self-pruning attention
         # affinity = xk.matmul(xk.transpose(-1,-2)).relu().to(dtype=torch.float).clamp(min=0,max=1)
@@ -271,24 +274,38 @@ class Attention(nn.Module):
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
         vc = xv.view(*s)
-        output = torch.zeros_like(xv)  # b h l d
+        output = [] #torch.zeros_like(xv)  # b h l d
+        denom = []
 
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
-            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1)
+            # Calculate decay
+            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
             affinity = torch.log1p(affinity.neg().add(1e-6)).triu(i*c+1)  # b h c l
             affinity = affinity.cumsum(3).exp().triu(i*c)
-            score = k_.matmul(xq.transpose(-2,-1))  # b h c l
-            score = F.logsigmoid(score.neg()).neg() * affinity.to(dtype=torch.bfloat16)
-            v_ = vc[:,:,i]  # b h c d
-            output = output + score.transpose(-1,-2).matmul(v_)
+            # Calculate attn scores
+            score = k_.matmul(xq.transpose(-1,-2)).add(affinity.log().clamp(min=-1e12))  # b h r c l
+            denom_ = score.logsumexp(dim=-2)  # b h r l
+            score = score.sub(denom_.unsqueeze(-2))
+            # Assemble local softmax output
+            v_ = vc[:,:,i].unsqueeze(2)  # b h 1 c d
+            out_ = score.transpose(-1,-2).exp().matmul(v_)  # b h r l d
+            output.append(out_)
+            denom.append(denom_)
+        
+        # Weighted avg for final softmax
+        output = torch.stack(output, dim=0)
+        denom = torch.stack(denom, dim=0)
+        total_denom = denom.logsumexp(0)
+        denom = denom.sub(total_denom).exp()
+        out = out.mul(denom.unsqueeze(-1)).sum(0)  # b h r l d
 
         # Reshape, project out
         output = self.gn(output)
-        output = output.transpose(
-            1, 2
-        ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
+        output = output.permute(
+            0, 3, 1, 2, 4
+        ).contiguous()  # (bs, seqlen, n_local_heads, n_rep, head_dim)
         output = output.view(bs, seqlen, -1)
         return self.wo(output)
 
