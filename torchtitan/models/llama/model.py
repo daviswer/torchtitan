@@ -481,7 +481,6 @@ class Transformer(nn.Module):
         )
 
         self.output = nn.Linear(model_args.dim, model_args.vocab_size, bias=False)
-        print(output.std())
         self.init_weights()
 
     def init_weights(self):
@@ -542,8 +541,10 @@ class Transformer(nn.Module):
         for layer in self.layers.values():
             h = layer(h, self.freqs_cis)
 
+        print(h.std())
         h = self.norm(h) if self.norm else h
         output = self.output(h).float() if self.output else h
+        print(output.std())
         return output
 
     @classmethod
