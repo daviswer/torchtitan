@@ -198,9 +198,9 @@ class Attention(nn.Module):
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
         )
-        self.gn = build_norm(
-            model_args.norm_type, dim=self.head_dim, eps=model_args.norm_eps
-        )
+        # self.gn = build_norm(
+        #     model_args.norm_type, dim=self.head_dim, eps=model_args.norm_eps
+        # )
         # self.sinks = nn.Parameter(torch.empty(2, self.n_kv_heads, self.head_dim, self.head_dim))
 
     def init_weights(self, init_std: float):
@@ -302,7 +302,7 @@ class Attention(nn.Module):
         output = output.mul(denom.unsqueeze(-1)).sum(0)  # b h r l d
 
         # Reshape, project out
-        output = self.gn(output)
+        # output = self.gn(output)
         output = output.permute(
             0, 3, 1, 2, 4
         ).contiguous()  # (bs, seqlen, n_local_heads, n_rep, head_dim)
