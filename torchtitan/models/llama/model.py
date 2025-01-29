@@ -290,7 +290,7 @@ class Attention(nn.Module):
             score = score.sub(denom_.unsqueeze(-2))
             # Assemble local softmax output
             v_ = vc[:,:,i].unsqueeze(2)  # b h 1 c d
-            out_ = score.transpose(-1,-2).exp().matmul(v_)  # b h r l d
+            out_ = score.transpose(-1,-2).exp().to(dtype=xq.dtype).matmul(v_)  # b h r l d
             output.append(out_)
             denom.append(denom_)
         
@@ -298,7 +298,7 @@ class Attention(nn.Module):
         output = torch.stack(output, dim=0)
         denom = torch.stack(denom, dim=0)
         total_denom = denom.logsumexp(0)
-        denom = denom.sub(total_denom).exp()
+        denom = denom.sub(total_denom).exp().to(dtype=xq.dtype)
         out = out.mul(denom.unsqueeze(-1)).sum(0)  # b h r l d
 
         # Reshape, project out
