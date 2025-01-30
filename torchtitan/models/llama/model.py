@@ -276,6 +276,7 @@ class Attention(nn.Module):
         vc = xv.view(*s)
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
+        mask = torch.ones(c,l,device=xq.device,dtype=torch.bool)
 
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
@@ -283,9 +284,10 @@ class Attention(nn.Module):
             # Calculate decay
             affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
             affinity = torch.log1p(affinity.neg().add(1e-6)).triu(i*c+1)  # b h c l
-            affinity = affinity.cumsum(3).exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
+            affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
+            affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12).unsqueeze(2)
             # Calculate attn scores
-            score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity.log())  # b h r c l
+            score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity) #.log())  # b h r c l
             denom_ = score.logsumexp(dim=-2)  # b h r l
             score = score.sub(denom_.unsqueeze(-2))
             # Assemble local softmax output
