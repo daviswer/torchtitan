@@ -247,15 +247,14 @@ class Attention(nn.Module):
         # ).neg().matmul(sinks[1].mul(self.head_dim**.5)) # torch.zeros_like(xv)  # b h l d
 
         # apply rope
-        xq, xkr = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
         # keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
         # values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
 
-        xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        xq = xq.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
         xk = xk.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        xkr = xkr.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xv = xv.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         
         # Split out q if n_kv_heads < n_heads
@@ -274,7 +273,6 @@ class Attention(nn.Module):
         b = bs
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
-        kcr = xkr.view(*s)
         vc = xv.view(*s)
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
@@ -282,7 +280,6 @@ class Attention(nn.Module):
 
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
-            kr_ = kcr[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             # Calculate decay
             affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
@@ -290,7 +287,7 @@ class Attention(nn.Module):
             affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
             affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12).unsqueeze(2)
             # Calculate attn scores
-            score = kr_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity) #.log())  # b h r c l
+            score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity) #.log())  # b h r c l
             denom_ = score.logsumexp(dim=-2)  # b h r l
             score = score.sub(denom_.unsqueeze(-2))
             # Assemble local softmax output
