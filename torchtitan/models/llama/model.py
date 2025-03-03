@@ -9,7 +9,7 @@
 
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import torch
 import torch.nn.functional as F
@@ -214,6 +214,7 @@ class Attention(nn.Module):
         self,
         x: torch.Tensor,
         freqs_cis: torch.Tensor,
+        afflist: List[torch.Tensor]
     ):
         """
         Forward pass of the attention module.
@@ -253,17 +254,18 @@ class Attention(nn.Module):
         # keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
         # values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
 
-        xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        xq = xq.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
         xk = xk.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        xkr = xkr.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xv = xv.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         
         # Split out q if n_kv_heads < n_heads
         xq = xq.view(bs, -1, self.n_rep, seqlen, self.head_dim)  # b h r l d
 
-        # # Full self-pruning attention
-        # affinity = xk.matmul(xk.transpose(-1,-2)).relu().to(dtype=torch.float).clamp(min=0,max=1)
-        # affinity = affinity.neg().log1p().triu(1).cumsum(3).exp().triu()
+        # Full self-pruning attention
+        with torch.no_grad():
+            affinity = xk.matmul(xk.transpose(-1,-2)).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
+            affinity = affinity.neg().add(1e-6).log1p().triu(1).cumsum(3).exp().triu()
+        afflist.append(affinity)
         # score = F.logsigmoid(xq.matmul(xk.transpose(-1,-2)).neg()).neg() * affinity.to(dtype=torch.bfloat16)
         # output = score.matmul(xv)
 
@@ -274,7 +276,6 @@ class Attention(nn.Module):
         b = bs
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
-        kcr = xkr.view(*s)
         vc = xv.view(*s)
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
@@ -282,7 +283,6 @@ class Attention(nn.Module):
 
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
-            kr_ = kcr[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             # Calculate decay
             affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
@@ -290,7 +290,7 @@ class Attention(nn.Module):
             affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
             affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12).unsqueeze(2)
             # Calculate attn scores
-            score = kr_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity) #.log())  # b h r c l
+            score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity) #.log())  # b h r c l
             denom_ = score.logsumexp(dim=-2)  # b h r l
             score = score.sub(denom_.unsqueeze(-2))
             # Assemble local softmax output
@@ -418,6 +418,7 @@ class TransformerBlock(nn.Module):
         self,
         x: torch.Tensor,
         freqs_cis: torch.Tensor,
+        afflist: List[torch.Tensor],
     ):
         """
         Perform a forward pass through the TransformerBlock.
@@ -430,7 +431,7 @@ class TransformerBlock(nn.Module):
             torch.Tensor: Output tensor after applying attention and feedforward layers.
 
         """
-        h = x + self.attention(self.attention_norm(x), freqs_cis)
+        h = x + self.attention(self.attention_norm(x), freqs_cis, afflist)
         out = h + self.feed_forward(self.ffn_norm(h))
         return out
 
@@ -543,12 +544,13 @@ class Transformer(nn.Module):
         # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
         h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
 
+        afflist = []
         for layer in self.layers.values():
-            h = layer(h, self.freqs_cis)
+            h = layer(h, self.freqs_cis, afflist)
 
         h = self.norm(h) if self.norm else h
         output = self.output(h).float() if self.output else h
-        return output
+        return output, afflist
 
     @classmethod
     def from_model_args(cls, model_args: ModelArgs) -> "Transformer":
