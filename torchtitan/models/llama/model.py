@@ -265,7 +265,7 @@ class Attention(nn.Module):
         with torch.no_grad():
             affinity = xk.matmul(xk.transpose(-1,-2)).relu().to(dtype=torch.float).clamp(min=0,max=1).pow(2)
             affinity = affinity.neg().add(1e-6).log1p().triu(1).cumsum(3).exp().triu()
-        afflist.append(affinity)
+        afflist.append(affinity.cpu())
         # score = F.logsigmoid(xq.matmul(xk.transpose(-1,-2)).neg()).neg() * affinity.to(dtype=torch.bfloat16)
         # output = score.matmul(xv)
 
