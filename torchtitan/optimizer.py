@@ -74,7 +74,7 @@ def linear_warmup_linear_decay(
 
     else:
         max_ = 1
-        min_ = 0.1
+        min_ = 0.0125
         cur = current_step - warmup_steps
         return min_ + 0.5 * (max_ - min_) * (1 + math.cos(cur / decay_steps * math.pi))
     return curr_adjustment
