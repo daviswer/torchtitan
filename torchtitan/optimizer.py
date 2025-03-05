@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import math
 
 import torch
 from torch.optim.lr_scheduler import LambdaLR
@@ -72,7 +73,10 @@ def linear_warmup_linear_decay(
         curr_adjustment = float(current_step / (warmup_steps + 1))
 
     else:
-        curr_adjustment = 1
+        max_ = 1
+        min_ = 0.1
+        cur = current_step - warmup_steps
+        return min_ + 0.5 * (max_ - min_) * (1 + math.cos(cur / decay_steps * math.pi))
     return curr_adjustment
 
 
