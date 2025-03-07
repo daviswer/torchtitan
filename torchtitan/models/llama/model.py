@@ -284,7 +284,7 @@ class Attention(nn.Module):
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
         mask = torch.ones(c,l,device=xq.device,dtype=torch.bool)
-        static = nn.functional.softplus(self.wstatic(x)).neg().view(bs, seqlen, 2, self.n_kv_heads).sigmoid().permute(2,0,3,1)  # 2 b h l
+        static = nn.functional.softplus(self.wstatic(x)).neg().view(bs, seqlen, 2, self.n_kv_heads).permute(2,0,3,1)  # 2 b h l
         static_src = static[0].unsqueeze(2)  # b h 1 l
         static_dest = static[1].view(b, self.n_kv_heads, n, c)  # b h n c
 
