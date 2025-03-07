@@ -296,7 +296,7 @@ class Attention(nn.Module):
             # Calculate statics
             static_dest_ = static_dest[:,:,i].unsqueeze(-1)  # b h c 1
             # Calculate affinity, with low-skewed outliers
-            affinity = (affinity + static_src + static_dest).div(3).exp()
+            affinity = (affinity + static_src + static_dest_).div(3).exp()
             
             affinity = torch.log1p(affinity.clamp(min=0,max=1-1e-12).neg()).triu(i*c+1)  # b h c l
             affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
