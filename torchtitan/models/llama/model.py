@@ -292,13 +292,13 @@ class Attention(nn.Module):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             # Calculate decay
-            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=1e-12, max=1).log().mul(2)  # forget value: b h c l
+            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=1e-6, max=1).log().mul(2)  # forget value: b h c l
             # Calculate statics
             static_dest_ = static_dest[:,:,i].unsqueeze(-1)  # b h c 1
             # Calculate affinity, with low-skewed outliers
             affinity = (affinity + static_src + static_dest_).div(3).exp()
             
-            affinity = torch.log1p(affinity.clamp(min=0,max=1-1e-12).neg()).triu(i*c+1)  # b h c l
+            affinity = torch.log1p(affinity.clamp(min=0,max=1-1e-6).neg()).triu(i*c+1)  # b h c l
             affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
             affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12).unsqueeze(2)
             # Calculate attn scores
