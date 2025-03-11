@@ -213,7 +213,7 @@ class Attention(nn.Module):
         nn.init.uniform_(self.bstatic)
         static_max = math.log(.1)
         static_min = math.log(.001)
-        self.bstatic.data = (self.bstatic.data * (static_max-static_min) + static_min).neg()/10
+        self.bstatic.data = (self.bstatic.data * (static_max-static_min) + static_min).neg()
         # nn.init.trunc_normal_(self.sinks, mean=0.0, std=0.02)
         # self.gn.reset_parameters()
 
@@ -284,7 +284,7 @@ class Attention(nn.Module):
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
         mask = torch.ones(c,l,device=xq.device,dtype=torch.bool)
-        static = nn.functional.softplus(self.wstatic(x) + self.bstatic*10).neg().view(bs, seqlen, 2, self.n_kv_heads).permute(2,0,3,1)  # 2 b h l
+        static = nn.functional.softplus(self.wstatic(x) + self.bstatic).neg().view(bs, seqlen, 2, self.n_kv_heads).permute(2,0,3,1)  # 2 b h l
         static_src = static[0].unsqueeze(2)  # b h 1 l
         static_dest = static[1].view(b, self.n_kv_heads, n, c)  # b h n c
 
@@ -298,7 +298,7 @@ class Attention(nn.Module):
             # Calculate affinity, with low-skewed outliers
             affinity = (static_src + static_dest_).div(2).exp()
             
-            affinity = torch.log1p(affinity.clamp(min=0,max=1-1e-6).neg()).triu(i*c+1)  # b h c l
+            affinity = torch.log1p(affinity.neg().clamp(min=1e-6,max=1)).triu(i*c+1)  # b h c l
             affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
             affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12).unsqueeze(2)
             # Calculate attn scores
