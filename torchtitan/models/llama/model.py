@@ -9,7 +9,7 @@
 
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import math
 import torch
@@ -221,6 +221,7 @@ class Attention(nn.Module):
         self,
         x: torch.Tensor,
         freqs_cis: torch.Tensor,
+        afflist: List[torch.Tensor],
     ):
         """
         Forward pass of the attention module.
@@ -288,6 +289,7 @@ class Attention(nn.Module):
         static_src = static[0].unsqueeze(2)  # b h 1 l
         static_dest = static[1].view(b, self.n_kv_heads, n, c)  # b h n c
 
+        aff = []
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
@@ -301,6 +303,7 @@ class Attention(nn.Module):
             affinity = torch.log1p(affinity.clamp(min=0,max=1-1e-6).neg()).triu(i*c+1)  # b h c l
             affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
             affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12).unsqueeze(2)
+            aff.append(affinity.detach().cpu())
             # Calculate attn scores
             score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity) #.log())  # b h r c l
             denom_ = score.logsumexp(dim=-2)  # b h r l
@@ -310,6 +313,8 @@ class Attention(nn.Module):
             out_ = score.transpose(-1,-2).exp().to(dtype=xq.dtype).matmul(v_)  # b h r l d
             output.append(out_)
             denom.append(denom_)
+        with torch.no_grad():
+            afflist.append(torch.cat(aff, dim=3))
         
         # Weighted avg for final softmax
         output = torch.stack(output, dim=0)
@@ -324,7 +329,7 @@ class Attention(nn.Module):
             0, 3, 1, 2, 4
         ).contiguous()  # (bs, seqlen, n_local_heads, n_rep, head_dim)
         output = output.view(bs, seqlen, -1)
-        return self.wo(output)
+        return self.wo(output), afflist
 
 
 class FeedForward(nn.Module):
@@ -430,6 +435,7 @@ class TransformerBlock(nn.Module):
         self,
         x: torch.Tensor,
         freqs_cis: torch.Tensor,
+        afflist: List[torch.Tensor],
     ):
         """
         Perform a forward pass through the TransformerBlock.
@@ -442,9 +448,10 @@ class TransformerBlock(nn.Module):
             torch.Tensor: Output tensor after applying attention and feedforward layers.
 
         """
-        h = x + self.attention(self.attention_norm(x), freqs_cis)
+        h, afflist = self.attention(self.attention_norm(x), freqs_cis)
+        h = x + h
         out = h + self.feed_forward(self.ffn_norm(h))
-        return out
+        return out, afflist
 
     def init_weights(self):
         for norm in (self.attention_norm, self.ffn_norm):
@@ -555,12 +562,13 @@ class Transformer(nn.Module):
         # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
         h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
 
+        afflist = []
         for layer in self.layers.values():
-            h = layer(h, self.freqs_cis)
+            h, afflist = layer(h, self.freqs_cis, afflist)
 
         h = self.norm(h) if self.norm else h
         output = self.output(h).float() if self.output else h
-        return output
+        return output, afflist
 
     @classmethod
     def from_model_args(cls, model_args: ModelArgs) -> "Transformer":
