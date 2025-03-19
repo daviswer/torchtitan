@@ -242,10 +242,6 @@ class Attention(nn.Module):
         xk = xk.view(bs, seqlen, -1, self.head_dim)
         xv = xv.view(bs, seqlen, -1, self.head_dim)
 
-        # Normalize k
-        # xk = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
-        # sinks = self.sinks/self.sinks.pow(2).sum(-1, True).sqrt().add(1e-6)
-
         # Compute sink scores before rope
         # sinks = sinks.repeat(1,self.n_rep,1,1)  # (k/v, h, d, d)
         # output = F.logsigmoid(
@@ -254,6 +250,10 @@ class Attention(nn.Module):
 
         # apply rope
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        
+        # Normalize k
+        xkr = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
+        # sinks = self.sinks/self.sinks.pow(2).sum(-1, True).sqrt().add(1e-6)
 
         # repeat k/v heads if n_kv_heads < n_heads
         # keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
@@ -261,6 +261,7 @@ class Attention(nn.Module):
 
         xq = xq.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
         xk = xk.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        xkr = xkr.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         xv = xv.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
         
         # Split out q if n_kv_heads < n_heads
@@ -279,6 +280,7 @@ class Attention(nn.Module):
         b = bs
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
+        kcr = xkr.view(*s)
         vc = xv.view(*s)
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
@@ -288,7 +290,7 @@ class Attention(nn.Module):
         static_dest = static[1].view(b, self.n_kv_heads, n, c)  # b h n c
 
         for i in range(n):
-            k_ = kc[:,:,i].div(math.sqrt(self.head_dim))  # b h c d
+            k_ = kcr[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             # Calculate decay
             affinity = k_.matmul(kt)  # forget value: b h c l
