@@ -150,8 +150,8 @@ def main(job_config: JobConfig):
     # loss function to be shared by Pipeline Parallel and SPMD training
     def loss_fn(pred, labels):
         return torch.nn.functional.cross_entropy(
-            pred.flatten(0, 1).float(), labels.flatten(0, 1)
-        )
+            pred.flatten(0, 1).float(), labels.flatten(0, 1), reduction="none",
+        ).view(*labels.size())
 
     if job_config.training.compile:
         loss_fn = torch.compile(loss_fn)
@@ -298,6 +298,7 @@ def main(job_config: JobConfig):
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
     ) as memory_profiler:
+        loss_tracker = []
         while train_state.step < job_config.training.steps:
             train_state.step += 1
             train_state.ntokens += job_config.training.batch_size * dp_degree * job_config.training.seq_len
@@ -349,11 +350,12 @@ def main(job_config: JobConfig):
                 # Non-PP forward / backward
                 with train_context(optional_context_parallel_ctx):
                     pred = model(input_ids)
-                    loss = loss_fn(pred, labels)
+                    loss = loss_fn(pred, labels).mean(1)
+                    loss_tracker.append(loss.detach().cpu())
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
                     del pred
-                    loss.backward()
+                    loss.mean().backward()
 
             # clip gradients
             gnorm = utils.clip_grad_norm_(
@@ -483,6 +485,9 @@ def main(job_config: JobConfig):
                     timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
+
+    loss_tracker = torch.stack(loss_tracker, dim=0)
+    torch.save(loss_tracker, os.path.join(job_config.job.dump_folder, "loss_logging", f"losses_rank_{torch.distributed.get_rank()}.pth"))
 
     if torch.distributed.get_rank() == 0:
         logger.info("Sleeping 2 seconds for other ranks to complete")
