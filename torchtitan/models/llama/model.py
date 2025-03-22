@@ -293,7 +293,7 @@ class Attention(nn.Module):
             k_ = kcr[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             # Calculate decay
-            affinity = k_.matmul(kt)  # forget value: b h c l
+            affinity = k_.matmul(kt).float()  # forget value: b h c l
             # # Calculate statics
             # static_dest_ = static_dest[:,:,i].unsqueeze(-1)  # b h c 1
             # # Calculate affinity, with low-skewed outliers
