@@ -206,9 +206,10 @@ class Attention(nn.Module):
         # self.sinks = nn.Parameter(torch.empty(2, self.n_kv_heads, self.head_dim, self.head_dim))
 
     def init_weights(self, init_std: float):
-        for linear in (self.wq, self.wk, self.wv, self.wstatic):
+        for linear in (self.wq, self.wk, self.wv):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
         nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
+        self.wstatic.weight.data.zero_()
         # static_max = .1
         # static_min = .001
         # nn.init.uniform_(self.wstatic.bias)
