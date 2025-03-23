@@ -279,7 +279,6 @@ class Attention(nn.Module):
         b = bs
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
-        kcr = xkr.view(*s)
         vc = xv.view(*s)
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
@@ -289,7 +288,7 @@ class Attention(nn.Module):
         static_dest = static[1].view(b, self.n_kv_heads, n, c)  # b h n c
 
         for i in range(n):
-            k_ = kcr[:,:,i]  # b h c d
+            k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             # Calculate decay
             affinity = k_.matmul(kt)  # forget value: b h c l
