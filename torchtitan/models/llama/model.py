@@ -206,10 +206,9 @@ class Attention(nn.Module):
         # self.sinks = nn.Parameter(torch.empty(2, self.n_kv_heads, self.head_dim, self.head_dim))
 
     def init_weights(self, init_std: float):
-        for linear in (self.wq, self.wk, self.wv):
+        for linear in (self.wq, self.wk, self.wv, self.wstatic):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
         nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
-        self.wstatic.weight.data.zero_()
         # static_max = .1
         # static_min = .001
         # nn.init.uniform_(self.wstatic.bias)
@@ -284,7 +283,7 @@ class Attention(nn.Module):
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
         mask = torch.ones(c,l,device=xq.device,dtype=torch.bool)
-        static = self.wstatic(x).tanh().view(bs, seqlen, 2, self.n_kv_heads).permute(2,0,3,1)  # 2 b h l
+        static = self.wstatic(x).sigmoid().view(bs, seqlen, 2, self.n_kv_heads).permute(2,0,3,1)  # 2 b h l
         static_src = static[0].unsqueeze(2)  # b h 1 l
         static_dest = static[1].view(b, self.n_kv_heads, n, c)  # b h n c
 
@@ -296,8 +295,8 @@ class Attention(nn.Module):
             # Calculate statics
             static_dest_ = static_dest[:,:,i].unsqueeze(-1)  # b h c 1
             # Calculate affinity, with low-skewed outliers
-            affinity = (affinity + static_src + static_dest_).div(3)
-            affinity = affinity.relu().clamp(min=0,max=1-1e-6).float().pow(2)
+            affinity = torch.minimum(torch.minimum(affinity, static_src), static_dest_)
+            affinity = affinity.relu().float().clamp(min=0,max=1-1e-6).pow(2)
             
             affinity = torch.log1p(affinity.neg()).triu(i*c+1)  # b h c l
             affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
