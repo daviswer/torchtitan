@@ -199,7 +199,7 @@ class Attention(nn.Module):
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
         )
-        self.wstatic = nn.Linear(model_args.dim, 2*self.n_kv_heads, bias=False)
+        self.wstatic = nn.Linear(model_args.dim, 2*self.n_kv_heads, bias=True)
         # self.gn = build_norm(
         #     model_args.norm_type, dim=self.head_dim, eps=model_args.norm_eps
         # )
@@ -209,6 +209,7 @@ class Attention(nn.Module):
         for linear in (self.wq, self.wk, self.wv, self.wstatic):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
         nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
+        self.wstatic.bias.data.zero_()
         # static_max = .1
         # static_min = .001
         # nn.init.uniform_(self.wstatic.bias)
@@ -291,12 +292,12 @@ class Attention(nn.Module):
             k_ = kc[:,:,i]  # b h c d
             kt = xk.transpose(-2,-1)  # b h d l
             # Calculate decay
-            affinity = k_.matmul(kt)  # forget value: b h c l
+            affinity = k_.matmul(kt).relu().float()  # forget value: b h c l
             # Calculate statics
             static_dest_ = static_dest[:,:,i].unsqueeze(-1)  # b h c 1
             # Calculate affinity, with low-skewed outliers
-            affinity = torch.minimum(torch.minimum(affinity, static_src), static_dest_)
-            affinity = affinity.relu().float().clamp(min=0,max=1-1e-6).pow(2)
+            affinity = affinity*static_src*static_dest_
+            affinity = affinity.clamp(min=0,max=1-1e-6)
             
             affinity = torch.log1p(affinity.neg()).triu(i*c+1)  # b h c l
             affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
