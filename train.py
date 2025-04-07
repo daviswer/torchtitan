@@ -195,20 +195,22 @@ def main(job_config: JobConfig):
     )
 
     # build optimizer after applying parallelisms to the model
-    # params_0d = [p for name, p in model.named_parameters() if "bias" in name or "_norm" in name]
-    # params_1d = [p for name, p in model.named_parameters() if "embeddings" in name]
-    # params_2d = [p for name, p in model.named_parameters() if sum([w in name for w in ["wq","wk","wv","wo","w1","w2","w3"]])]
-    # assert len(params_0d) + len(params_1d) + len(params_2d) == len(list(model.parameters()))
-    # pgroups = [params_0d, params_1d, params_2d]
+    params_0d = [p for name, p in model.named_parameters() if "bias" in name or "_norm" in name]
+    params_nd = [p for name, p in model.named_parameters() 
+                 if sum([w in name for w in ["embeddings","wq","wk","wv","wo","w1","w2","w3"]])
+                 or "static" in name and "bias" not in name
+                ]
+    assert len(params_0d) + len(params_nd) == len(list(model.parameters()))
+    pgroups = [params_0d, params_nd]
     # d = model.model_args.dim
     # lrs = [
     #     job_config.optimizer.lr / model.model_args.mup_lr_dscale,
     #     job_config.optimizer.lr / d**.5,
     #     job_config.optimizer.lr * model.model_args.mup_lr_dscale / d,
     # ]
-    pgroups = [model.parameters()]
-    lrs = [job_config.optimizer.lr]
-    optimizers = build_optimizers(pgroups, lrs, job_config)
+    # pgroups = [model.parameters()]
+    # lrs = [job_config.optimizer.lr]
+    optimizers = build_optimizers(pgroups, job_config)
     lr_schedulers = build_lr_schedulers(optimizers.optimizers, job_config)
 
     train_state = TrainState()
