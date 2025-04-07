@@ -86,8 +86,8 @@ class UniversalAttention(Function):
             dstat_dest[:,:,i] += dstat.mul(static_src.unsqueeze(-2)).sum(-1).div(static_dest_.pow(2).mul(3))  # bhcl, bhl -> bhc
             dstat_src += dstat.mul(static_dest_.unsqueeze(-1)).sum(-2).div(static_src.pow(2).mul(3))  # bhcl, bhc -> bhl
 
-            # daff = daff.mul(static_dest_.unsqueeze(-1)*static_src.unsqueeze(-2))  # <-- from prod with statics
-            # daff = daff.to(dtype=xq.dtype) * aff1.abs().pow(-1/3).mul(2/3).mul(aff1.gt(0))  # <-- from relu + pow
+            daff = daff.mul(static_dest_.unsqueeze(-1)*static_src.unsqueeze(-2))  # <-- from prod with statics
+            daff = daff.to(dtype=xq.dtype)# * aff1.abs().pow(-1/3).mul(2/3).mul(aff1.gt(0))  # <-- from relu + pow
 
             dkc += daff.transpose(-1,-2).matmul(k_).view(b,h,n,c,d)  # bhcl, bhcd -> bhld, <-- grad via kt
             dkc[:,:,i] += daff.matmul(kt.transpose(-1,-2))  # bhcl, bhdl -> bhcd, <-- grad via k_
