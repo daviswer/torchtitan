@@ -274,6 +274,12 @@ def main(job_config: JobConfig):
 
     checkpoint.reset()
 
+    with torch.no_grad():
+        inp = torch.arange(8).view(1,8).cuda()
+        pred = model(inp)
+    if torch.distributed.get_rank() == 0:
+        print("Start signature:", pred.argmax(dim=-1))
+
     # train loop
     logger.info(
         f"Training starts at step {train_state.step + 1}, "
@@ -450,7 +456,12 @@ def main(job_config: JobConfig):
                     timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
-
+    with torch.no_grad():
+        inp = torch.arange(8).view(1,8).cuda()
+        pred = model(inp)
+    if torch.distributed.get_rank() == 0:
+        print("End signature:", pred.argmax(dim=-1))
+            
     if torch.distributed.get_rank() == 0:
         logger.info("Sleeping 2 seconds for other ranks to complete")
         time.sleep(2)
