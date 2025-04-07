@@ -16,7 +16,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torchtitan.models.norms import build_norm
-from utils import SMVecMatMul, UniversalAttention
+from torchtitan.models.llama.utils import SMVecMatMul, UniversalAttention
 
 # from causal_conv1d import causal_conv1d_fn
 
