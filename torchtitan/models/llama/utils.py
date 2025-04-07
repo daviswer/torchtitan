@@ -41,6 +41,7 @@ class UniversalAttention(Function):
 
     @staticmethod
     def backward(ctx, g_out, g_denom):
+        # Note: when using mixed precision, g_out is downcast but g_denom is always fp32
         kc,vc,xq,static_src,static_dest = ctx.saved_tensors
         dkc,dvc,dxq,dstat_src,dstat_dest = [torch.zeros_like(x) for x in [kc,vc,xq,static_src,static_dest]]
         b,h,r,l,d = xq.shape
@@ -66,18 +67,18 @@ class UniversalAttention(Function):
             sscore = score.softmax(dim=-2)
 
             # Backward pass
-            dvc[:,:,i] += sscore.matmul(dout_).sum(2)  # bhrcl,bhrld -> bhcd
+            dvc[:,:,i] += sscore.to(dtype=dvc.dtype).matmul(dout_).sum(2)  # bhrcl,bhrld -> bhcd
             
             dscore = v_.unsqueeze(2).matmul(dout_.transpose(-1,-2))  # bhcd,bhrld -> bhrcl   <-- from out
             dscore = dscore.sub(dscore.mul(sscore).sum(-2,True)).mul(sscore)  # <-- from softmax
             dscore += score.softmax(-2) * ddenom_.unsqueeze(-2)  # b h r c l   <-- from denom
 
-            dxq += dscore.transpose(-1,-2).matmul(k_.unsqueeze(2))  # bhrcl, bhcd -> bhrld
-            dkc[:,:,i] += dscore.transpose(2,3).flatten(3,4).matmul(xq.flatten(2,3))  # bhrcl, bhrld -> bhcd
+            dxq += dscore.to(dtype=dxq.dtype).transpose(-1,-2).matmul(k_.unsqueeze(2))  # bhrcl, bhcd -> bhrld
+            dkc[:,:,i] += dscore.to(dtype=dkc.dtype).transpose(2,3).flatten(3,4).matmul(xq.flatten(2,3))  # bhrcl, bhrld -> bhcd
 
-            daff = dscore.sum(2).float()  # b h c l
+            daff = dscore.sum(2)  # b h c l
             daff = daff.flip([3]).cumsum(3).flip([3]).triu(i*c+1)  # <-- from cumsum
-            daff /= aff3.clamp(min=0, max=1-1e-6)-1  # <-- from ln(1-x)
+            daff /= aff3.clamp(min=1e-6, max=1-1e-6)-1  # <-- from ln(1-x)
             daff *= aff3.ge(0)
             daff *= aff3.le(1-1e-6)
             dstat = daff.mul(aff2).to(dtype=static_src.dtype)  # b h c l
