@@ -270,7 +270,7 @@ class Attention(nn.Module):
         denom = []
         mask = torch.ones(c,l,device=xq.device,dtype=torch.bool)
         static = self.wstatic(x).sigmoid().view(bs, seqlen, 2, self.n_kv_heads).permute(2,0,3,1)  # 2 b h l
-        static_src = static[0].unsqueeze(2)  # b h 1 l
+        static_src = static[0]  # b h l
         static_dest = static[1].view(b, self.n_kv_heads, n, c)  # b h n c
 
         # Perform universal attention
