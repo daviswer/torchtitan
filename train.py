@@ -197,8 +197,9 @@ def main(job_config: JobConfig):
     # build optimizer after applying parallelisms to the model
     params_0d = [p for name, p in model.named_parameters() if "bias" in name or "_norm" in name]
     params_nd = [p for name, p in model.named_parameters() 
-                 if sum([w in name for w in ["embeddings","wq","wk","wv","wo","w1","w2","w3"]])
+                 if sum([w in name for w in ["embeddings","output","wq","wk","wv","wo","w1","w2","w3"]])
                  or "wstatic" in name and "bias" not in name
+                 or "norm" in name and "_norm" not in name
                 ]
     assert len(params_0d) + len(params_nd) == len(list(model.parameters())), f"0d: {len(params_0d)}, nd: {len(params_nd)}, total: {len(list(model.parameters()))}"
     pgroups = [params_0d, params_nd]
