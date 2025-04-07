@@ -12,12 +12,12 @@ from torchtitan.config_manager import JobConfig
 
 
 # consider split between PP and non-PP
-def build_optimizers(pgroups, lrs, job_config: JobConfig):
+def build_optimizers(pgroups, lrs, wds, job_config: JobConfig):
     """Wrap one optimizer per param group in an OptimizersContainer which provides a single
     step() and zero_grad() method for all the child optimizers.
     """
 
-    def _build_optimizer(pgroup, lr):
+    def _build_optimizer(pgroup, lr, wd):
         name = job_config.optimizer.name
         fused = job_config.optimizer.fused
 
@@ -25,7 +25,7 @@ def build_optimizers(pgroups, lrs, job_config: JobConfig):
         optimizer_kwargs = {
             "lr": lr,
             "betas": (0.9, 0.95),
-            "weight_decay": 0.1,
+            "weight_decay": wd,
             "fused": fused,
             "foreach": not fused,
         }
@@ -53,7 +53,7 @@ def build_optimizers(pgroups, lrs, job_config: JobConfig):
             for optimizer in self.optimizers:
                 optimizer.zero_grad()
 
-    return OptimizersContainer([_build_optimizer(pgroup, lr) for pgroup,lr in zip(pgroups, lrs)])
+    return OptimizersContainer([_build_optimizer(pgroup, lr, wd) for pgroup,lr in zip(pgroups, lrs, wds)])
 
 
 def linear_warmup_linear_decay(
