@@ -25,6 +25,7 @@ class UniversalAttention(Function):
             affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12)  # Re-mask, with 1s on diagonal
 
             # Perform actual attention operation
+            print(k_.shape, xq.shape, affinity.shape, "bhcd bhrld bhcl")
             score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity.unsqueeze(2))  # b h r c l
             denom_ = score.logsumexp(dim=-2)  # b h r l
             out_ = score.transpose(-1,-2).softmax(dim=-1).to(dtype=xq.dtype).matmul(v_.unsqueeze(2))  # b h r l d
