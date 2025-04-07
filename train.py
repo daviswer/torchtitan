@@ -198,9 +198,9 @@ def main(job_config: JobConfig):
     params_0d = [p for name, p in model.named_parameters() if "bias" in name or "_norm" in name]
     params_nd = [p for name, p in model.named_parameters() 
                  if sum([w in name for w in ["embeddings","wq","wk","wv","wo","w1","w2","w3"]])
-                 or "static" in name and "bias" not in name
+                 or "wstatic" in name and "bias" not in name
                 ]
-    assert len(params_0d) + len(params_nd) == len(list(model.parameters()))
+    assert len(params_0d) + len(params_nd) == len(list(model.parameters())), f"0d: {len(params_0d)}, nd: {len(params_nd)}, total: {len(list(model.parameters()))}"
     pgroups = [params_0d, params_nd]
     lrs = [job_config.optimizer.lr, job_config.optimizer.lr]
     wds = [0, 0.1]
