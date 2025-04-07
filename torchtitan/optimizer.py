@@ -53,7 +53,7 @@ def build_optimizers(pgroups, lrs, wds, job_config: JobConfig):
             for optimizer in self.optimizers:
                 optimizer.zero_grad()
 
-    return OptimizersContainer([_build_optimizer(pgroup, lr, wd) for pgroup,lr in zip(pgroups, lrs, wds)])
+    return OptimizersContainer([_build_optimizer(pgroup, lr, wd) for pgroup,lr,wd in zip(pgroups, lrs, wds)])
 
 
 def linear_warmup_linear_decay(
