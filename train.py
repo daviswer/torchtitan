@@ -275,8 +275,8 @@ def main(job_config: JobConfig):
     checkpoint.reset()
 
     with torch.no_grad():
-        inp = torch.arange(8).view(1,8).cuda()
-        pred = model(inp)
+        inp = torch.arange(4096).view(1,8).cuda()
+        pred = model(inp)[0,-8:]
     if torch.distributed.get_rank() == 0:
         print("Start signature:", pred.argmax(dim=-1))
 
@@ -457,8 +457,8 @@ def main(job_config: JobConfig):
                     world_mesh=world_mesh,
                 )
     with torch.no_grad():
-        inp = torch.arange(8).view(1,8).cuda()
-        pred = model(inp)
+        inp = torch.arange(4096).view(1,8).cuda()
+        pred = model(inp)[0,-8:]
     if torch.distributed.get_rank() == 0:
         print("End signature:", pred.argmax(dim=-1))
             
