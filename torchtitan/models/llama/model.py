@@ -16,6 +16,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torchtitan.models.norms import build_norm
+from utils import SMVecMatMul, UniversalAttention
 
 # from causal_conv1d import causal_conv1d_fn
 
@@ -201,6 +202,8 @@ class Attention(nn.Module):
         )
         self.wstatic = nn.Linear(model_args.dim, 2*self.n_kv_heads, bias=True)
         self.wstatic.bias._no_weight_decay = True
+        self.UA = UniversalAttention.apply
+        self.SMVMM = SMVecMatMul.apply
         # self.gn = build_norm(
         #     model_args.norm_type, dim=self.head_dim, eps=model_args.norm_eps
         # )
@@ -213,9 +216,7 @@ class Attention(nn.Module):
         static_max = .1
         static_min = .001
         nn.init.uniform_(self.wstatic.bias)
-        self.wstatic.bias.data = (self.wstatic.bias.data * (math.log(static_max) - math.log(static_min)) + math.log(static_min)).neg()
-        # nn.init.trunc_normal_(self.sinks, mean=0.0, std=0.02)
-        # self.gn.reset_parameters()
+        self.wstatic.bias.data = self.wstatic.bias.data * (math.log(static_max) - math.log(static_min)) + math.log(static_min)
 
     def forward(
         self,
@@ -245,20 +246,9 @@ class Attention(nn.Module):
 
         # Normalize k
         xk = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
-        # sinks = self.sinks/self.sinks.pow(2).sum(-1, True).sqrt().add(1e-6)
-
-        # Compute sink scores before rope
-        # sinks = sinks.repeat(1,self.n_rep,1,1)  # (k/v, h, d, d)
-        # output = F.logsigmoid(
-        #     xq.transpose(1,2).matmul(sinks[0].transpose(-1,-2)).neg()  # b h l l'
-        # ).neg().matmul(sinks[1].mul(self.head_dim**.5)) # torch.zeros_like(xv)  # b h l d
 
         # apply rope
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
-
-        # repeat k/v heads if n_kv_heads < n_heads
-        # keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
-        # values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
 
         xq = xq.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
         xk = xk.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
@@ -266,12 +256,6 @@ class Attention(nn.Module):
         
         # Split out q if n_kv_heads < n_heads
         xq = xq.view(bs, -1, self.n_rep, seqlen, self.head_dim)  # b h r l d
-
-        # # Full self-pruning attention
-        # affinity = xk.matmul(xk.transpose(-1,-2)).relu().to(dtype=torch.float).clamp(min=0,max=1)
-        # affinity = affinity.neg().log1p().triu(1).cumsum(3).exp().triu()
-        # score = F.logsigmoid(xq.matmul(xk.transpose(-1,-2)).neg()).neg() * affinity.to(dtype=torch.bfloat16)
-        # output = score.matmul(xv)
 
         # blockwise self-pruning attention
         c = 512
@@ -281,49 +265,25 @@ class Attention(nn.Module):
         s = [b, -1, n, c, self.head_dim]
         kc = xk.view(*s)
         vc = xv.view(*s)
+        kt = xk.transpose(-2,-1)  # b h d l
         output = [] #torch.zeros_like(xv)  # b h l d
         denom = []
         mask = torch.ones(c,l,device=xq.device,dtype=torch.bool)
-        static = nn.functional.softplus(self.wstatic(x)).neg().view(bs, seqlen, 2, self.n_kv_heads).permute(2,0,3,1)  # 2 b h l
+        static = self.wstatic(x).sigmoid().view(bs, seqlen, 2, self.n_kv_heads).permute(2,0,3,1)  # 2 b h l
         static_src = static[0].unsqueeze(2)  # b h 1 l
         static_dest = static[1].view(b, self.n_kv_heads, n, c)  # b h n c
 
-        for i in range(n):
-            k_ = kc[:,:,i]  # b h c d
-            kt = xk.transpose(-2,-1)  # b h d l
-            # Calculate decay
-            affinity = k_.matmul(kt).relu().to(dtype=torch.float).clamp(min=1e-6, max=1).log().mul(2)  # forget value: b h c l
-            # Calculate statics
-            static_dest_ = static_dest[:,:,i].unsqueeze(-1)  # b h c 1
-            # Calculate affinity, with low-skewed outliers
-            affinity = (affinity + static_src + static_dest_).div(3).exp()
-            
-            affinity = torch.log1p(affinity.clamp(min=0,max=1-1e-6).neg()).triu(i*c+1)  # b h c l
-            affinity = affinity.cumsum(3) #.exp().triu(i*c).unsqueeze(2).clamp(min=1e-12)  # b h 1 c l
-            affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12).unsqueeze(2)
-            # Calculate attn scores
-            score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity) #.log())  # b h r c l
-            denom_ = score.logsumexp(dim=-2)  # b h r l
-            score = score.sub(denom_.unsqueeze(-2))
-            # Assemble local softmax output
-            v_ = vc[:,:,i].unsqueeze(2)  # b h 1 c d
-            out_ = score.transpose(-1,-2).exp().to(dtype=xq.dtype).matmul(v_)  # b h r l d
-            output.append(out_)
-            denom.append(denom_)
-        
+        # Perform universal attention
+        output, denom = self.UA(kc, vc, xq, static_src, static_dest)  # b h r l d n, b h r l n
+
         # Weighted avg for final softmax
-        output = torch.stack(output, dim=0)
-        denom = torch.stack(denom, dim=0)
-        total_denom = denom.logsumexp(0)
-        denom = denom.sub(total_denom).exp().to(dtype=xq.dtype)
-        output = output.mul(denom.unsqueeze(-1)).sum(0)  # b h r l d
+        output = self.SMVMM(output, denom)  # b h r l d
 
         # Reshape, project out
         # output = self.gn(output)
         output = output.permute(
             0, 3, 1, 2, 4
-        ).contiguous()  # (bs, seqlen, n_local_heads, n_rep, head_dim)
-        output = output.view(bs, seqlen, -1)
+        ).reshape(bs, seqlen, -1)
         return self.wo(output)
 
 
