@@ -76,15 +76,15 @@ class UniversalAttention(Function):
             dxq += dscore.to(dtype=dxq.dtype).transpose(-1,-2).matmul(k_.unsqueeze(2))  # bhrcl, bhcd -> bhrld
             dkc[:,:,i] += dscore.to(dtype=dkc.dtype).transpose(2,3).flatten(3,4).matmul(xq.flatten(2,3))  # bhrcl, bhrld -> bhcd
 
-            # daff = dscore.sum(2)  # b h c l
-            # daff = daff.flip([3]).cumsum(3).flip([3]).triu(i*c+1)  # <-- from cumsum
-            # daff /= aff3.clamp(min=1e-6, max=1-1e-6)-1  # <-- from ln(1-x)
-            # daff *= aff3.ge(0)
-            # daff *= aff3.le(1-1e-6)
-            # dstat = daff.mul(aff2).to(dtype=static_src.dtype)  # b h c l
+            daff = dscore.sum(2)  # b h c l
+            daff = daff.flip([3]).cumsum(3).flip([3]).triu(i*c+1)  # <-- from cumsum
+            daff /= aff3.clamp(min=1e-6, max=1-1e-6)-1  # <-- from ln(1-x)
+            daff *= aff3.ge(0)
+            daff *= aff3.le(1-1e-6)
+            dstat = daff.mul(aff2).to(dtype=static_src.dtype)  # b h c l
 
-            # dstat_dest[:,:,i] += dstat.mul(static_src.unsqueeze(-2)).sum(-1).div(static_dest_.pow(2).mul(3))  # bhcl, bhl -> bhc
-            # dstat_src += dstat.mul(static_dest_.unsqueeze(-1)).sum(-2).div(static_src.pow(2).mul(3))  # bhcl, bhc -> bhl
+            dstat_dest[:,:,i] += dstat.mul(static_src.unsqueeze(-2)).sum(-1).div(static_dest_.pow(2).mul(3))  # bhcl, bhl -> bhc
+            dstat_src += dstat.mul(static_dest_.unsqueeze(-1)).sum(-2).div(static_src.pow(2).mul(3))  # bhcl, bhc -> bhl
 
             # daff = daff.mul(static_dest_.unsqueeze(-1)*static_src.unsqueeze(-2))  # <-- from prod with statics
             # daff = daff.to(dtype=xq.dtype) * aff1.abs().pow(-1/3).mul(2/3).mul(aff1.gt(0))  # <-- from relu + pow
