@@ -202,6 +202,8 @@ def main(job_config: JobConfig):
                 ]
     assert len(params_0d) + len(params_nd) == len(list(model.parameters()))
     pgroups = [params_0d, params_nd]
+    lrs = [job_config.optimizer.lr, job_config.optimizer.lr]
+    wds = [0, 0.1]
     # d = model.model_args.dim
     # lrs = [
     #     job_config.optimizer.lr / model.model_args.mup_lr_dscale,
@@ -210,7 +212,7 @@ def main(job_config: JobConfig):
     # ]
     # pgroups = [model.parameters()]
     # lrs = [job_config.optimizer.lr]
-    optimizers = build_optimizers(pgroups, job_config)
+    optimizers = build_optimizers(pgroups, lrs, wds, job_config)
     lr_schedulers = build_lr_schedulers(optimizers.optimizers, job_config)
 
     train_state = TrainState()
