@@ -42,7 +42,7 @@ class UniversalAttention(Function):
     @staticmethod
     def backward(ctx, g_out, g_denom):
         kc,vc,xq,static_src,static_dest = ctx.saved_tensors
-        dkc,dvc,dxq,dstat_src,dstat_dest = [torch.zeros_like(x) for x in ctx.saved_tensors]
+        dkc,dvc,dxq,dstat_src,dstat_dest = [torch.zeros_like(x) for x in [kc,vc,xq,static_src,static_dest]]
         b,h,r,l,d = xq.shape
         _,_,n,c,_ = kc.shape
         mask = torch.ones(c,l, dtype=torch.bool, device=xq.device)
