@@ -15,11 +15,11 @@ class UniversalAttention(Function):
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             v_ = vc[:,:,i]  # b h c d
-            static_dest_ = static_dest[:,:,i]  # b h c
+            static_src_ = static_src[:,:,i]  # b h c
 
             # Calculate decay matrix
             affinity = k_.matmul(kt).relu().pow(2/3).float()  # deltanet style decay
-            affinity = affinity * static_dest_.unsqueeze(-1) * static_src.unsqueeze(-2)  # incorporate mamba-style and per-token decay
+            affinity = affinity * static_src_.unsqueeze(-1) * static_dest.unsqueeze(-2)  # incorporate mamba-style and per-token decay
             affinity = torch.log1p(affinity.clamp(min=0, max=1-1e-6).neg())  # b h c l
             affinity = affinity.triu(i*c+1).cumsum(3)  # Accumulate decay with causal masking
             affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12)  # Re-mask, with 1s on diagonal
@@ -54,14 +54,14 @@ class UniversalAttention(Function):
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             v_ = vc[:,:,i]  # b h c d
-            static_dest_ = static_dest[:,:,i]  # b h c
+            static_src_ = static_src[:,:,i]  # b h c
             dout_ = g_out[...,i]
             ddenom_ = g_denom[...,i]
 
             # Rerun forward pass
             aff1 = k_.matmul(kt)
             aff2 = aff1.relu().pow(2/3).float()
-            aff3 = aff2 * static_dest_.unsqueeze(-1) * static_src.unsqueeze(-2)
+            aff3 = aff2 * static_src_.unsqueeze(-1) * static_dest.unsqueeze(-2)
             score = torch.log1p(aff3.clamp(min=0,max=1-1e-6).neg()).triu(i*c+1).cumsum(3).masked_fill(mask.tril(i*c-1), -1e12)
             score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(score.unsqueeze(2))  # b h r c l
             sscore = score.softmax(dim=-2)
@@ -83,10 +83,10 @@ class UniversalAttention(Function):
             daff *= aff3.le(1-1e-6)
             dstat = daff.mul(aff2).to(dtype=static_src.dtype)  # b h c l
 
-            dstat_dest[:,:,i] += dstat.mul(static_src.unsqueeze(-2)).sum(-1).div(static_dest_.pow(2).mul(3))  # bhcl, bhl -> bhc
-            dstat_src += dstat.mul(static_dest_.unsqueeze(-1)).sum(-2).div(static_src.pow(2).mul(3))  # bhcl, bhc -> bhl
+            dstat_src[:,:,i] += dstat.mul(static_dest.unsqueeze(-2)).sum(-1).div(static_src_.pow(2).mul(3))  # bhcl, bhl -> bhc
+            dstat_dest += dstat.mul(static_src_.unsqueeze(-1)).sum(-2).div(static_dest.pow(2).mul(3))  # bhcl, bhc -> bhl
 
-            daff = daff.mul(static_dest_.unsqueeze(-1)*static_src.unsqueeze(-2))  # <-- from prod with statics
+            daff = daff.mul(static_src_.unsqueeze(-1)*static_dest.unsqueeze(-2))  # <-- from prod with statics
             daff = daff.to(dtype=xq.dtype) * aff1.abs().add(1e-9).pow(-1/3).mul(2/3).mul(aff1.gt(0))  # <-- from relu + pow
 
             dkc += daff.transpose(-1,-2).matmul(k_).view(b,h,n,c,d)  # bhcl, bhcd -> bhld, <-- grad via kt
