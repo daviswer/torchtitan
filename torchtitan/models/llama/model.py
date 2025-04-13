@@ -213,8 +213,8 @@ class Attention(nn.Module):
         for linear in (self.wq, self.wk, self.wv, self.wstatic):
             nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
         nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
-        static_max = 1
-        static_min = .01
+        static_max = .1
+        static_min = .001
         nn.init.uniform_(self.wstatic.bias)
         self.wstatic.bias.data = self.wstatic.bias.data * (math.log(static_max) - math.log(static_min)) + math.log(static_min)
 
