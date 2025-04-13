@@ -247,8 +247,12 @@ class Attention(nn.Module):
         # Normalize k
         xk = xk/xk.pow(2).sum(-1, True).sqrt().add(1e-6)
 
-        # apply rope
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        # apply half-rope
+        xq_ = xq[...,self.head_dim//2:]
+        xk_ = xk[...,self.head_dim//2:]
+        xq, xk = apply_rotary_emb(xq[...,:self.head_dim//2], xk[...,:self.head_dim//2], freqs_cis=freqs_cis)
+        xq = torch.cat([xq,xq_], dim=3)
+        xk = torch.cat([xk,xk_], dim=3)
 
         xq = xq.transpose(1, 2)  # (bs, n_heads, seqlen, head_dim)
         xk = xk.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
@@ -258,7 +262,7 @@ class Attention(nn.Module):
         xq = xq.view(bs, -1, self.n_rep, seqlen, self.head_dim)  # b h r l d
 
         # blockwise self-pruning attention
-        c = 512
+        c = 1024
         l = seqlen
         n = seqlen//c
         b = bs
@@ -494,7 +498,7 @@ class Transformer(nn.Module):
 
     def _precompute_freqs_cis(self) -> torch.Tensor:
         return precompute_freqs_cis(
-            self.model_args.dim // self.model_args.n_heads,
+            self.model_args.dim // self.model_args.n_heads // 2,
             # Need to compute until at least the max token limit for generation
             # (use 2x max sequence length to be safe)
             self.model_args.max_seq_len * 2,
@@ -514,6 +518,14 @@ class Transformer(nn.Module):
         """
         # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
         h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
+
+        # h: b l d
+        s = h.size()
+        h = h.view(s[0],-1)
+        d2 = s[2]//2
+        h = h.roll(d2,1)
+        h[:,:d2] = 0
+        h = h.view(*s)
 
         for layer in self.layers.values():
             h = layer(h, self.freqs_cis)
