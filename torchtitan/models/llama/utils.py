@@ -12,6 +12,7 @@ class UniversalAttention(Function):
         static_src = static_src.pow(1/3)
         static_dest = static_dest.pow(1/3)
         kt = kc.view(b,h,l,d).transpose(-2,-1)  # b h d l
+        afflist = []
         for i in range(n):
             k_ = kc[:,:,i]  # b h c d
             v_ = vc[:,:,i]  # b h c d
@@ -23,6 +24,7 @@ class UniversalAttention(Function):
             affinity = torch.log1p(affinity.clamp(min=0, max=1-1e-6).neg())  # b h c l
             affinity = affinity.triu(i*c+1).cumsum(3)  # Accumulate decay with causal masking
             affinity = affinity.masked_fill(mask.tril(i*c-1), -1e12)  # Re-mask, with 1s on diagonal
+            afflist.append(affinity)
 
             # Perform actual attention operation
             score = k_.unsqueeze(2).matmul(xq.transpose(-1,-2)).add(affinity.unsqueeze(2))  # b h r c l
@@ -31,7 +33,7 @@ class UniversalAttention(Function):
 
             out[...,i] = out_
             denom[...,i] = denom_
-        return out, denom
+        return out, denom, torch.cat(afflist, dim=2)
 
     @staticmethod
     def setup_context(ctx, inputs, outputs):
@@ -40,7 +42,7 @@ class UniversalAttention(Function):
         ctx.save_for_backward(kc,vc,xq,ss,sd)
 
     @staticmethod
-    def backward(ctx, g_out, g_denom):
+    def backward(ctx, g_out, g_denom, g_aff):
         # Note: when using mixed precision, g_out is downcast but g_denom is always fp32
         kc,vc,xq,static_src,static_dest = ctx.saved_tensors
         dkc,dvc,dxq,dstat_src,dstat_dest = [torch.zeros_like(x) for x in [kc,vc,xq,static_src,static_dest]]
