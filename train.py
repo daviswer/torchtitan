@@ -289,6 +289,7 @@ def main(job_config: JobConfig):
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
     )
+    has_saved = False
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
@@ -343,7 +344,11 @@ def main(job_config: JobConfig):
             else:
                 # Non-PP forward / backward
                 with train_context(optional_context_parallel_ctx):
-                    pred = model(input_ids)
+                    pred, afflist = model(input_ids)
+                    if not has_saved and dp_rank==0:
+                        torch.save([input_ids, afflist], "/gpfs/davis/temp.pth")
+                        time.sleep(10)
+                        assert False
                     loss = loss_fn(pred, labels)
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
