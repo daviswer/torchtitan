@@ -1484,16 +1484,16 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
     # Split line into input and target for the CLM task.
     data = PreprocessDataset(data, causal_lm)
     # Enable auto-saving
-    if cfg.checkpoint.enable_checkpoint and not cfg.checkpoint.model_weights_only:
-        assert (
-            cfg.checkpoint.interval_type == "steps"
-        ), "Dataloader checkpointing supports only step-based interval"
-        data = CheckpointDataset(
-            data,
-            os.path.join(cfg.job.dump_folder, cfg.checkpoint.folder),
-            cfg.checkpoint.interval,
-            cfg.training.batch_size,
-        )
+    # if cfg.checkpoint.enable_checkpoint and not cfg.checkpoint.model_weights_only:
+    #     assert (
+    #         cfg.checkpoint.interval_type == "steps"
+    #     ), "Dataloader checkpointing supports only step-based interval"
+    #     data = CheckpointDataset(
+    #         data,
+    #         os.path.join(cfg.job.dump_folder, cfg.checkpoint.folder),
+    #         cfg.checkpoint.interval,
+    #         cfg.training.batch_size,
+    #     )
     return torch.utils.data.DataLoader(
         data, num_workers=cfg.dataset.num_data_workers, batch_size=cfg.training.batch_size
     )
