@@ -9,7 +9,7 @@
 
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import math
 import torch
@@ -222,6 +222,7 @@ class Attention(nn.Module):
         self,
         x: torch.Tensor,
         freqs_cis: torch.Tensor,
+        afflist: List[torch.Tensor],
     ):
         """
         Forward pass of the attention module.
@@ -274,7 +275,9 @@ class Attention(nn.Module):
         static_dest = static[1]  # b h l
 
         # Perform universal attention
-        output, denom = self.UA(kc, vc, xq, static_src, static_dest)  # b h r l d n, b h r l n
+        output, denom, aff = self.UA(kc, vc, xq, static_src, static_dest)  # b h r l d n, b h r l n
+        with torch.no_grad():
+            afflist.append(aff)
 
         # Weighted avg for final softmax
         output = self.SMVMM(output, denom)  # b h r l d
@@ -284,7 +287,7 @@ class Attention(nn.Module):
         output = output.permute(
             0, 3, 1, 2, 4
         ).reshape(bs, seqlen, -1)
-        return self.wo(output)
+        return self.wo(output), afflist
 
 
 class FeedForward(nn.Module):
@@ -390,6 +393,7 @@ class TransformerBlock(nn.Module):
         self,
         x: torch.Tensor,
         freqs_cis: torch.Tensor,
+        afflist: List[torch.Tensor],
     ):
         """
         Perform a forward pass through the TransformerBlock.
@@ -402,9 +406,10 @@ class TransformerBlock(nn.Module):
             torch.Tensor: Output tensor after applying attention and feedforward layers.
 
         """
-        h = x + self.attention(self.attention_norm(x), freqs_cis)
+        h, afflist = self.attention(self.attention_norm(x), freqs_cis)
+        h = x + h
         out = h + self.feed_forward(self.ffn_norm(h))
-        return out
+        return out, afflist
 
     def init_weights(self):
         for norm in (self.attention_norm, self.ffn_norm):
@@ -515,12 +520,13 @@ class Transformer(nn.Module):
         # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
         h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
 
+        afflist = []
         for layer in self.layers.values():
-            h = layer(h, self.freqs_cis)
+            h, afflist = layer(h, self.freqs_cis, afflist)
 
         h = self.norm(h) if self.norm else h
         output = self.output(h).float() if self.output else h
-        return output
+        return output, afflist
 
     @classmethod
     def from_model_args(cls, model_args: ModelArgs) -> "Transformer":
