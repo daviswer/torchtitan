@@ -276,7 +276,7 @@ def main(job_config: JobConfig):
 
     with torch.no_grad():
         inp = torch.arange(512).view(1,512).cuda()
-        pred = model(inp)[0,-8:]
+        pred = model(inp)[0][0,-8:]
     if torch.distributed.get_rank() == 0:
         print("Start signature:", pred.argmax(dim=-1))
 
@@ -463,7 +463,7 @@ def main(job_config: JobConfig):
                 )
     with torch.no_grad():
         inp = torch.arange(512).view(1,512).cuda()
-        pred = model(inp)[0,-8:]
+        pred = model(inp)[0][0,-8:]
     if torch.distributed.get_rank() == 0:
         print("End signature:", pred.argmax(dim=-1))
             
