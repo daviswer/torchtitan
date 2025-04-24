@@ -370,6 +370,13 @@ model_config.vocab_size = 128256
 model_config.max_seq_len = 4096
 model = model_cls.from_model_args(model_config)
 
+# load state dict
+state_dict = {"model_state": model.state_dict()}
+load_state_dict(
+    state_dict=state_dict, storage_reader=FileSystemReader(args.model_path), no_dist=True
+)
+model.load_state_dict(state_dict["model_state"])
+
 tokenizer = get_tokenizer(args.tokenizer)
 model.eval()
 torch.set_grad_enabled(False)
