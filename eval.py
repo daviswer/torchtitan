@@ -374,6 +374,7 @@ model.init_weights()
 
 # load state dict
 state_dict = {"model_state": model.state_dict()}
+print(state_dict["model_state"].keys())
 load_state_dict(
     state_dict=state_dict, storage_reader=FileSystemReader(args.model_path), no_dist=True
 )
