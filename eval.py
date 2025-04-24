@@ -11,6 +11,7 @@ from lm_eval.api.model import LM  # type: ignore
 from lm_eval.api.registry import register_model  # type: ignore
 from torch import nn
 from torch import distributed as dist
+from torch.distributed._shard.checkpoint import FileSystemReader, load_state_dict
 
 from torchtitan.models import model_name_to_cls, model_name_to_tokenizer, models_config
 
