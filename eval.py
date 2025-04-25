@@ -11,7 +11,8 @@ from lm_eval.api.model import LM  # type: ignore
 from lm_eval.api.registry import register_model  # type: ignore
 from torch import nn
 from torch import distributed as dist
-from torch.distributed._shard.checkpoint import FileSystemReader, load_state_dict
+# from torch.distributed._shard.checkpoint import FileSystemReader, load_state_dict
+from torch.distributed.checkpoint.state_dict_loader import _load_state_dict_from_keys as load
 
 from torchtitan.models import model_name_to_cls, model_name_to_tokenizer, models_config
 
@@ -373,12 +374,14 @@ model = model_cls.from_model_args(model_config)
 model.init_weights()
 
 # load state dict
-state_dict = {"model_state": model.state_dict()}
-print(state_dict["model_state"].keys())
-load_state_dict(
-    state_dict=state_dict, storage_reader=FileSystemReader(args.model_path), no_dist=True
-)
-model.load_state_dict(state_dict["model_state"])
+# state_dict = {"model": model.state_dict()}
+# print(state_dict["model"].keys())
+# load_state_dict(
+#     state_dict=state_dict, storage_reader=FileSystemReader(args.model_path), no_dist=True
+# )
+# model.load_state_dict(state_dict["model_state"])
+state_dict = load(keys={"model":None}, checkpoint_id=args.model_path)
+model.load_state_dict(state_dict["model"])
 
 tokenizer = get_tokenizer(args.tokenizer)
 model.eval()
