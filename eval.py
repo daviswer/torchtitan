@@ -371,6 +371,7 @@ model_config = models_config[model_name][args.architecture] # TODO import
 model_config.vocab_size = 128256
 model_config.max_seq_len = 4096
 model = model_cls.from_model_args(model_config)
+model.cuda()
 model.init_weights()
 
 # load state dict
