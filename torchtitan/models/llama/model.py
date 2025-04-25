@@ -258,7 +258,7 @@ class Attention(nn.Module):
         xq = xq.view(bs, -1, self.n_rep, seqlen, self.head_dim)  # b h r l d
 
         # blockwise self-pruning attention
-        c = 512
+        c = 64
         l = seqlen
         n = seqlen//c
         b = bs
