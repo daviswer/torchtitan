@@ -1020,9 +1020,8 @@ class StreamingDocDataset(_StatefulDataset):
                 ndocs = doc_counts[shard]
                 doc_start = int(ndocs * shardset[shard][0])
                 doc_end = max(doc_start, int(ndocs * shardset[shard][1]) - 1)  # inclusive upper bound
-                if doc_end >= doc_start:
-                    self.docset.append([shard, doc_start, doc_end])
-                    doccount += doc_end - doc_start + 1
+                self.docset.append([shard, doc_start, doc_end])
+                doccount += doc_end - doc_start + 1
             self._len = doccount
 
             if self.verbose:
