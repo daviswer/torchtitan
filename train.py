@@ -125,6 +125,8 @@ def main(job_config: JobConfig):
         else tokenizer.n_words
     )
     model_config.max_seq_len = job_config.training.seq_len
+    if job_config.training.n_layers:
+        model_config.n_layers = job_config.training.n_layers # to control the number of layers
 
     logger.info(f"Building {model_name} {job_config.model.flavor} with {model_config}")
     with torch.device("meta"):

@@ -6,7 +6,7 @@ dump_folder = "./outputs"
 description = "Llama 3 8B training"
 
 [profiling]
-enable_profiling = true
+enable_profiling = false
 save_traces_folder = "profile_trace"
 profile_freq = 100
 
