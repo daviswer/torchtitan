@@ -1366,6 +1366,8 @@ class SamplingDataset(_WrapperDataset):
             ]
         )
         assert len(self.datasets) > 0, "You must specify at least one dataset"
+        for d in datasets:
+            assert os.path.exists(os.path.join(datapath, d)), f"Invalid subdataset path: {os.path.exists(os.path.join(datapath, d))}"
 
         if weights is not None:
             assert len(weights) == len(
