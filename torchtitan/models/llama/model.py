@@ -36,7 +36,6 @@ class ModelArgs:
 
     # Granite specific arguments
     attention_multiplier: float = 1.0
-    attention_dropout: float = 0.0
     logits_scaling: float = 1.0
     residual_multiplier: float = 1.0
     embedding_multiplier: float = 1.0
@@ -153,7 +152,6 @@ class Attention(nn.Module):
     def __init__(self, model_args: ModelArgs):
         super().__init__()
         self.attn_mult = model_args.attention_multiplier
-        self.attn_dropout = model_args.attention_dropout
         self.n_heads = model_args.n_heads
         self.n_kv_heads = (
             model_args.n_heads
@@ -214,7 +212,7 @@ class Attention(nn.Module):
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
         # we use casual mask for training
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True, scale=self.attn_mult, dropout_p=self.attn_dropout)
+        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True, scale=self.attn_mult)
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
@@ -333,7 +331,6 @@ class TransformerBlock(nn.Module):
         h = self.attention(self.attention_norm(x), freqs_cis)
         h = residual + h * self.res_mult
 
-        # Feed Forward
         residual = h
         ff_out = self.feed_forward(self.ffn_norm(h))
         out = residual + ff_out * self.res_mult
