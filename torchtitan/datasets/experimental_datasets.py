@@ -1018,11 +1018,10 @@ class StreamingDocDataset(_StatefulDataset):
             doccount = 0
             for shard in shardset:
                 ndocs = doc_counts[shard]
-                doc_start = round(ndocs * shardset[shard][0])
-                doc_end = round(ndocs * shardset[shard][1]) - 1  # inclusive upper bound
-                if doc_end >= doc_start:
-                    self.docset.append([shard, doc_start, doc_end])
-                    doccount += doc_end - doc_start + 1
+                doc_start = int(ndocs * shardset[shard][0])
+                doc_end = max(doc_start, int(ndocs * shardset[shard][1]) - 1)  # inclusive upper bound
+                self.docset.append([shard, doc_start, doc_end])
+                doccount += doc_end - doc_start + 1
             self._len = doccount
 
             if self.verbose:
@@ -1242,12 +1241,12 @@ class ScalableShardDataset(_WrapperDataset):
         if not self.is_setup:
             _StatefulDataset.setup(self)
             n_logical_shards = self.total_shards
+            assert (
+                n_logical_shards % self.worldsize == 0
+            ), f"Total workers {self.worldsize} must divide n_logical_shards {n_logical_shards} evenly"
             logicals = list(range(n_logical_shards))
             self.logicals_owned = _shard_partition(logicals, self.rank, self.worldsize)
             self.n_logicals = n_logical_shards // self.worldsize
-            assert (
-                len(self.logicals_owned) == self.n_logicals
-            ), "(world size * num workers) does not divide logical shards evenly"
 
             # Build logical shards
             for i in range(self.n_logicals):

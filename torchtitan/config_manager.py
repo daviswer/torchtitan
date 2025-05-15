@@ -239,6 +239,9 @@ class JobConfig:
             "--training.seq_len", type=int, default=2048, help="Sequence length"
         )
         self.parser.add_argument(
+            "--training.n_layers", type=int, default=None, help="Number layers to truncate to"
+        )
+        self.parser.add_argument(
             "--training.warmup_steps",
             type=int,
             default=200,
