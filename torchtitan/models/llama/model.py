@@ -35,7 +35,7 @@ class ModelArgs:
     norm_type: str = "rmsnorm"
 
     # Granite specific arguments
-    attention_multiplier: float = 1.0
+    attention_multiplier: float = None
     logits_scaling: float = 1.0
     residual_multiplier: float = 1.0
     embedding_multiplier: float = 1.0
