@@ -242,6 +242,24 @@ class JobConfig:
             "--training.n_layers", type=int, default=None, help="Number layers to truncate to"
         )
         self.parser.add_argument(
+            "--training.multiple_of", type=int, default=None, help="Multiple of"
+        )
+        self.parser.add_argument(
+            "--training.ffn_dim_multiplier", type=float, default=None, help="Multiple for FFN"
+        )
+        self.parser.add_argument(
+            "--training.attention_multiplier", type=float, default=None, help="Multiple for Attention"
+        )
+        self.parser.add_argument(
+            "--training.embedding_multiplier", type=float, default=None, help="Multiple for embedding layer"
+        )
+        self.parser.add_argument(
+            "--training.logits_scaling", type=float, default=None, help="scale for logits"
+        )
+        self.parser.add_argument(
+            "--training.residual_multiplier", type=float, default=None, help="residual mult"
+        )
+        self.parser.add_argument(
             "--training.warmup_steps",
             type=int,
             default=200,
