@@ -1270,6 +1270,11 @@ class ScalableShardDataset(_WrapperDataset):
         self.setup()
         # Grab one doc at a time in random order
         data = [iter(d) for d in self.data]
+        # Reset if we're rescaling into a prematurely finished epoch
+        # (i.e. [1,1,0,0,0,0] into [1,1,0] [0,0,0] )
+        if sum(self.n_docs_remaining) == 0:
+            self.n_docs_remaining = [d._len for d in self.data]
+            self.generator.manual_seed(self.rank)
         while True:
             # Sample logical shard (or load from ckp)
             if self.current_reader is not None:
