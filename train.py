@@ -125,6 +125,20 @@ def main(job_config: JobConfig):
         else tokenizer.n_words
     )
     model_config.max_seq_len = job_config.training.seq_len
+    if job_config.training.n_layers:
+        model_config.n_layers = job_config.training.n_layers # to control the number of layers
+    if job_config.training.multiple_of:
+        model_config.multiple_of = job_config.training.multiple_of # to control the multiple
+    if job_config.training.ffn_dim_multiplier:
+        model_config.ffn_dim_multiplier = job_config.training.ffn_dim_multiplier # to control the ffn
+    if job_config.training.attention_multiplier:
+        model_config.attention_multiplier = job_config.training.attention_multiplier # to control the attention
+    if job_config.training.embedding_multiplier:
+        model_config.embedding_multiplier = job_config.training.embedding_multiplier # to control the embedding
+    if job_config.training.logits_scaling:
+        model_config.logits_scaling = job_config.training.logits_scaling # to control the logits
+    if job_config.training.residual_multiplier:
+        model_config.residual_multiplier = job_config.training.residual_multiplier # to control the residual
 
     logger.info(f"Building {model_name} {job_config.model.flavor} with {model_config}")
     with torch.device("meta"):

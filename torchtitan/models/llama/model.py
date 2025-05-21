@@ -34,6 +34,11 @@ class ModelArgs:
     depth_init: bool = True
     norm_type: str = "rmsnorm"
 
+    # Granite specific arguments
+    attention_multiplier: float = None
+    logits_scaling: float = 1.0
+    residual_multiplier: float = 1.0
+    embedding_multiplier: float = 1.0
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Tensor:
     """
@@ -146,6 +151,7 @@ class Attention(nn.Module):
 
     def __init__(self, model_args: ModelArgs):
         super().__init__()
+        self.attn_mult = model_args.attention_multiplier
         self.n_heads = model_args.n_heads
         self.n_kv_heads = (
             model_args.n_heads
@@ -206,7 +212,7 @@ class Attention(nn.Module):
         xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
         # we use casual mask for training
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True)
+        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True, scale=self.attn_mult)
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
@@ -280,6 +286,7 @@ class TransformerBlock(nn.Module):
 
     def __init__(self, layer_id: int, model_args: ModelArgs):
         super().__init__()
+        self.res_mult = model_args.residual_multiplier
         self.n_heads = model_args.n_heads
         self.dim = model_args.dim
         self.attention = Attention(model_args)
@@ -320,8 +327,13 @@ class TransformerBlock(nn.Module):
             torch.Tensor: Output tensor after applying attention and feedforward layers.
 
         """
-        h = x + self.attention(self.attention_norm(x), freqs_cis)
-        out = h + self.feed_forward(self.ffn_norm(h))
+        residual = x
+        h = self.attention(self.attention_norm(x), freqs_cis)
+        h = residual + h * self.res_mult
+
+        residual = h
+        ff_out = self.feed_forward(self.ffn_norm(h))
+        out = residual + ff_out * self.res_mult
         return out
 
     def init_weights(self):
@@ -355,6 +367,10 @@ class Transformer(nn.Module):
         self.model_args = model_args
         self.vocab_size = model_args.vocab_size
         self.n_layers = model_args.n_layers
+
+        # Granite specific params
+        self.logits_scaling = model_args.logits_scaling
+        self.embedding_multiplier = model_args.embedding_multiplier
 
         self.tok_embeddings = nn.Embedding(model_args.vocab_size, model_args.dim)
 
@@ -436,13 +452,14 @@ class Transformer(nn.Module):
 
         """
         # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
-        h = self.tok_embeddings(tokens) if self.tok_embeddings else tokens
+        h = self.tok_embeddings(tokens) * self.embedding_multiplier if self.tok_embeddings else tokens
 
         for layer in self.layers.values():
             h = layer(h, self.freqs_cis)
 
         h = self.norm(h) if self.norm else h
         output = self.output(h) if self.output else h
+        output = output/self.logits_scaling
         return output
 
     @classmethod
