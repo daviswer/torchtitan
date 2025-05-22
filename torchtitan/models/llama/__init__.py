@@ -21,6 +21,15 @@ llama3_configs = {
         multiple_of=1024,
         rope_theta=500000,
     ),
+    "20B": ModelArgs( # Granite code instruct flavor
+        dim=6144,
+        n_layers=52,
+        n_heads=48,
+        n_kv_heads=48,
+        ffn_dim_multiplier=4.0,
+        multiple_of=256,
+        rope_theta=500000,
+    ),
     "70B": ModelArgs(
         dim=8192,
         n_layers=80,
