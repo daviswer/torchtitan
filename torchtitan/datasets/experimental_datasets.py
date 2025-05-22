@@ -1263,6 +1263,9 @@ class ScalableShardDataset(_WrapperDataset):
                     )
             [d.setup() for d in self.data]
             self.n_docs_remaining = [d._len for d in self.data]
+            assert (
+                sum(self.n_docs_remaining) > 0
+            ), f"No documents detected in shard {self.rank} of {self.datapath}"
 
             self.generator = torch.Generator().manual_seed(self.rank)
 
