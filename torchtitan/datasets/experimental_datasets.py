@@ -372,6 +372,7 @@ class ArrowHandler(_ShardFileHandler):
         return self.open(path).num_record_batches
 
     def get(self, reader: pa.RecordBatchFileReader, index: int, drop_tokens: Set):
+        assert index < reader.num_record_batches, f"Illegal index {index} in set of {reader.num_record_batches} documents"
         frame = reader.get_batch(index)
         doc = None
         for name in self.col_names:
@@ -418,7 +419,8 @@ class ParquetHandler(_ShardFileHandler):
         return pq.read_metadata(path).num_rows
 
     def get(self, reader, index: int, drop_tokens: Set):
-        doc = self.tokenizer.encode(str(reader[index])[:128_000])
+        assert index < reader.length(), f"Illegal index {index} in set of {reader.length()} documents"
+        doc = self.tokenizer.encode(str(reader[index])[:256_000])
         if len(doc) > 0 and doc[0] in drop_tokens:
             doc = doc[1:]
         if len(doc) > 0 and doc[-1] in drop_tokens: # Recheck len for edge case where doc=[eos]
@@ -1018,10 +1020,11 @@ class StreamingDocDataset(_StatefulDataset):
             doccount = 0
             for shard in shardset:
                 ndocs = doc_counts[shard]
-                doc_start = int(ndocs * shardset[shard][0])
-                doc_end = max(doc_start, int(ndocs * shardset[shard][1]) - 1)  # inclusive upper bound
-                self.docset.append([shard, doc_start, doc_end])
-                doccount += doc_end - doc_start + 1
+                if ndocs > 0:
+                    doc_start = int(ndocs * shardset[shard][0])
+                    doc_end = max(doc_start, int(ndocs * shardset[shard][1]) - 1)  # inclusive upper bound
+                    self.docset.append([shard, doc_start, doc_end])
+                    doccount += doc_end - doc_start + 1
             self._len = doccount
 
             if self.verbose:
