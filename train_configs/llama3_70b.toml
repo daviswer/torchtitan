@@ -53,6 +53,11 @@ dataset_weights = "9050,114,236,450,49,51,50"
 num_data_workers = 1
 file_type = "hf_parquet"
 col_name = "text"
+spm_rate = 0.0
+psm_rate = 0.0
+fim_pre = -1
+fim_mid = -1
+fim_suf = -1
 
 [experimental]
 context_parallel_degree = 1
