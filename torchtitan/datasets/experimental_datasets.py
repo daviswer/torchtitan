@@ -1614,7 +1614,7 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
     )
     fim_training = cfg.dataset.psm_rate + cfg.dataset.spm_rate > 0
     if fim_training:
-        assert cfg.dataset.bos_token is None, "No BOS in FIM training. Did you mean fim_pre?"
+        assert cfg.dataset.bos_token == -1, "No BOS in FIM training. Did you mean fim_pre?"
 
     def causal_lm(data_seq, prompt_len=0):
         """
@@ -1684,9 +1684,9 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
             cfg.dataset.eos_token,
             cfg.dataset.psm_rate,
             cfg.dataset.spm_rate,
-            pre_token=cfg.dataset.fim_pre,
-            mid_token=cfg.dataset.fim_mid,
-            suf_token=cfg.dataset.fim_suf,
+            pre_token=None if cfg.dataset.fim_pre == -1 else cfg.dataset.fim_pre,
+            mid_token=None if cfg.dataset.fim_mid == -1 else cfg.dataset.fim_mid,
+            suf_token=None if cfg.dataset.fim_suf == -1 else cfg.dataset.fim_suf,
         )
     # Split line into input and target for the CLM task.
     data = PreprocessDataset(data, causal_lm)

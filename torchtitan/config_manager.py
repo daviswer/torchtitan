@@ -494,20 +494,20 @@ class JobConfig:
         self.parser.add_argument(
             "--dataset.fim_pre",
             type=int,
-            default=0,
-            help="Prefix indicator token for FIM training.",
+            default=-1,
+            help="Prefix indicator token for FIM training. If not using, leave as -1.",
         )
         self.parser.add_argument(
             "--dataset.fim_mid",
             type=int,
-            default=0,
-            help="Middle span indicator token for FIM training.",
+            default=-1,
+            help="Middle span indicator token for FIM training. If not using, leave as -1.",
         )
         self.parser.add_argument(
             "--dataset.fim_suf",
             type=int,
-            default=0,
-            help="Suffix indicator token for FIM training.",
+            default=-1,
+            help="Suffix indicator token for FIM training. If not using, leave as -1.",
         )
 
 
