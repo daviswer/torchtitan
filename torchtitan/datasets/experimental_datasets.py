@@ -716,6 +716,128 @@ class PreloadBufferDataset(_WrapperDataset):
         # Manually set buffer size
         self.buffer_size = len(self.buffer)
         return sharded_dicts
+    
+
+class FIMDataset(_WrapperDataset):
+    """
+    Wrapper for a StatefulDataset that implements Fill-In-the-Middle training
+    (https://arxiv.org/pdf/2207.14255).
+    Input should be a packed sequence (i.e. call BufferDataset before FIMDataset).
+    Breaks sequence apart into component document spans, and for each document span
+    of sufficient length, transforms with specified probability into:
+    PSM mode: <PRE> (prefix) <SUF> (suffix) <MID> (middle) <EOS>
+    SPM mode: <PRE> <SUF> (suffix) <MID> (prefix) (middle) <EOS>
+    The new delimiter tokens can be omitted by passing in None.
+    Any extra tokens after transformation are dropped from the end of the sequence.
+    ...
+    Args
+    ----
+    dataset : _StatefulDataset
+        Fully instantiated dataset
+    delimiter_token : any
+        Token used to indicate document boundaries
+    psm_rate : float
+        Chance to transform into PSM. Cannot exceed 1.
+    spm_rate : float
+        Chance to transform into SPM. Cannot exceed 1.
+    min_len : int
+        Minimum document length to perform FIM transformation
+    pre_token : any | none
+        Token used to indicate prefix section of the document
+    mid_token : any | none
+        Token used to indicate middle infill section of the document
+    suf_token : any | none
+        Token used to indicate suffix section of the document
+    """
+
+    def __init__(
+        self,
+        dataset: _StatefulDataset,
+        delimiter_token: Any,
+        psm_rate: float = 0.0,
+        spm_rate: float = 0.0,
+        min_len: int = 10,
+        pre_token=None,
+        mid_token=None,
+        suf_token=None,
+    ):
+        super().__init__(dataset)
+        assert (
+            psm_rate + spm_rate > 0
+        ), f"FIM training requires SPM or PSM transformation. Please specify a nonzero psm_rate or spm_rate."
+        assert (
+            psm_rate + spm_rate <= 1
+        ), f"Combined psm_rate {psm_rate} and spm_rate {spm_rate} probabilities cannot exceed 1."
+        self.psm = psm_rate
+        self.spm = spm_rate
+        self.delimiter = delimiter_token
+        self.min_len = min_len
+        self.pref = pre_token
+        self.suff = suf_token
+        self.midd = mid_token
+
+        self.g_state = None
+        self.generator = torch.Generator().manual_seed(self.rank)
+        self.state_params = ["g_state"]
+
+    def __iter__(self):
+        dataset = iter(self.dataset)
+        while True:
+            inp = next(dataset)
+            len_ = len(inp)
+            i_eos = [0] + [i for i, x in enumerate(inp) if x == self.delimiter] + [len_]
+            docs = [
+                inp[i_eos[j] + 1 : i_eos[j + 1]] for j in range(len(i_eos) - 1)
+            ]  # list[list[any]]
+            out = []
+            for i in range(len(docs)):
+                doc = docs[i]
+                if len(docs[i]) >= self.min_len:
+                    # decide psm, spm, or nothing
+                    thresh = torch.rand([1], generator=self.generator).item()
+                    if thresh < self.psm + self.spm:
+                        # Split doc
+                        doc = []
+                        if self.pref:
+                            doc = [self.pref]
+                        splits = torch.randint(
+                            0, len(docs[i]), [2], generator=self.generator
+                        ).tolist()
+                        pre = docs[i][: min(splits)]
+                        mid = docs[i][min(splits) : max(splits)]
+                        suf = docs[i][max(splits) :]
+
+                        if thresh < self.psm:
+                            # PSM transformation
+                            doc += pre
+                            if self.suff:
+                                doc.append(self.suff)
+                            doc += suf
+                            if self.midd:
+                                doc.append(self.midd)
+                            doc += mid
+                        else:
+                            # SPM transformation
+                            if self.suff:
+                                doc.append(self.suff)
+                            doc += suf
+                            if self.midd:
+                                doc.append(self.midd)
+                            doc += pre + mid
+                out += doc + [self.delimiter]
+            yield out[:len_]
+
+    def state_dict(self):
+        # Write generator state manually
+        self.g_state = self.generator.get_state()
+        return super().state_dict()
+
+    def load_state_dict(self, state_dicts, sharded_input=False):
+        sharded_dicts = super().load_state_dict(state_dicts, sharded_input)
+        # Manually set generator state if it exists
+        if self.g_state is not None:
+            self.generator.set_state(self.g_state)
+        return sharded_dicts
 
 
 class BufferDataset(_WrapperDataset):
@@ -1490,6 +1612,9 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
     datasets, weights, cols = parse_data_args(
         cfg.dataset.datasets, cfg.dataset.dataset_weights, cfg.dataset.col_name
     )
+    fim_training = cfg.dataset.psm_rate + cfg.dataset.spm_rate > 0
+    if fim_training:
+        assert cfg.dataset.bos_token is None, "No BOS in FIM training. Did you mean fim_pre?"
 
     def causal_lm(data_seq, prompt_len=0):
         """
@@ -1552,6 +1677,17 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
     )
     # Shuffle outputs in length 10k buffer. Consecutive lines appear 10k steps apart on average.
     data = PreloadBufferDataset(data, 10000)
+    # Apply FIM transformation if needed
+    if fim_training:
+        data = FIMDataset(
+            data,
+            cfg.dataset.eos_token,
+            cfg.dataset.psm_rate,
+            cfg.dataset.spm_rate,
+            pre_token=cfg.dataset.fim_pre,
+            mid_token=cfg.dataset.fim_mid,
+            suf_token=cfg.dataset.fim_suf,
+        )
     # Split line into input and target for the CLM task.
     data = PreprocessDataset(data, causal_lm)
     # Enable auto-saving

@@ -479,6 +479,37 @@ class JobConfig:
             default="tokens",
             help="Which column/field of the file shard contains the readable data.",
         )
+        self.parser.add_argument(
+            "--dataset.spm_rate",
+            type=float,
+            default=0.0,
+            help="Proportion of docs to split into suffix-prefix-middle order for FIM training.",
+        )
+        self.parser.add_argument(
+            "--dataset.psm_rate",
+            type=float,
+            default=0.0,
+            help="Proportion of docs to split into prefix-suffix-middle order for FIM training.",
+        )
+        self.parser.add_argument(
+            "--dataset.fim_pre",
+            type=int,
+            default=0,
+            help="Prefix indicator token for FIM training.",
+        )
+        self.parser.add_argument(
+            "--dataset.fim_mid",
+            type=int,
+            default=0,
+            help="Middle span indicator token for FIM training.",
+        )
+        self.parser.add_argument(
+            "--dataset.fim_suf",
+            type=int,
+            default=0,
+            help="Suffix indicator token for FIM training.",
+        )
+
 
         # checkpointing configs
         self.parser.add_argument(
