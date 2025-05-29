@@ -1007,6 +1007,7 @@ class StreamingDocDataset(_StatefulDataset):
         seed: int = 42,
         min_length: int = 1,
         max_chunksize: int = 1024,
+        max_consec_chunks: int = 64,
         verbose: bool = False,
     ):
         super().__init__(datapath, rank, worldsize)
@@ -1019,6 +1020,7 @@ class StreamingDocDataset(_StatefulDataset):
         self.eos = delimiter_token
         self.bos = bos_token
         self.drop = strip_tokens
+        self.max_consec = max_consec_chunks
         self.verbose = verbose
         self.docset: List[
             Any
@@ -1028,6 +1030,7 @@ class StreamingDocDataset(_StatefulDataset):
         self.docset_index = 0
         self.chunk_index = -1
         self.has_yielded = False
+        self.consec = 0
 
         # Stats
         self.epochs_seen = -1
@@ -1044,6 +1047,7 @@ class StreamingDocDataset(_StatefulDataset):
             "docs_seen",
             "percent_seen",
             "lcg_state",
+            "consec",
         ]
 
         # Setup flags
@@ -1210,8 +1214,11 @@ class StreamingDocDataset(_StatefulDataset):
         # Add bos/eos tokens if needed
         if self.bos is not None and j == 0:
             chunk = [self.bos] + chunk
-        if j == n_chunks - 1:
+        if j == n_chunks - 1 or self.consec == self.max_consec:
             chunk = chunk + [self.eos]
+            self.consec = 0
+        else:
+            self.consec += 1
         return chunk
 
     def _random_map_docid(self, size):
@@ -1659,6 +1666,7 @@ def build_experimental_data_loader(cfg, rank, world_size, tokenizer: Tokenizer =
         bos_token=None if cfg.dataset.bos_token == -1 else cfg.dataset.bos_token,
         strip_tokens=set(droplist),
         min_length=3,
+        max_consec_chunks=math.ceil(cfg.dataset.doc_breakpoint/1024),
         seed=42,
     )
     # Add rescaling/resharding

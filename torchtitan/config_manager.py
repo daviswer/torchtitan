@@ -509,7 +509,12 @@ class JobConfig:
             default=-1,
             help="Suffix indicator token for FIM training. If not using, leave as -1.",
         )
-
+        self.parser.add_argument(
+            "--dataset.doc_breakpoint",
+            type=int,
+            default=65536,
+            help="After this many tokens, insert EOS and treat long doc as multiple docs.",
+        )
 
         # checkpointing configs
         self.parser.add_argument(

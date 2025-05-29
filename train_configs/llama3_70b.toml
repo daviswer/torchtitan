@@ -58,6 +58,7 @@ psm_rate = 0.0
 fim_pre = -1
 fim_mid = -1
 fim_suf = -1
+doc_breakpoint = 65536
 
 [experimental]
 context_parallel_degree = 1
