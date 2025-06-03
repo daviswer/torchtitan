@@ -26,7 +26,6 @@ class ModelArgs:
     multiple_of: int = 256  # make SwiGLU hidden layer size multiple of large power of 2
     ffn_dim_multiplier: Optional[float] = None
     norm_eps: float = 1e-5
-    rope_theta: float = 10000
 
     max_seq_len: int = 2048
     # If `True`, then each transformer block init uses its layer ID, and if
@@ -34,89 +33,7 @@ class ModelArgs:
     depth_init: bool = True
     norm_type: str = "rmsnorm"
 
-    # Granite specific arguments
-    attention_multiplier: float = None
-    logits_scaling: float = 1.0
-    residual_multiplier: float = 1.0
-    embedding_multiplier: float = 1.0
-
-def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Tensor:
-    """
-    Precompute the frequency tensor for complex exponentials (cis) with given dimensions.
-
-    This function calculates a frequency tensor with complex exponentials using the given dimension 'dim'
-    and the end index 'end'. The 'theta' parameter scales the frequencies.
-    The returned tensor contains complex values in complex64 data type.
-
-    Args:
-        dim (int): Dimension of the frequency tensor.
-        end (int): End index for precomputing frequencies.
-        theta (float, optional): Scaling factor for frequency computation. Defaults to 10000.0.
-
-    Returns:
-        torch.Tensor: Precomputed frequency tensor with complex exponentials.
-    """
-    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    t = torch.arange(end, device=freqs.device)
-    freqs = torch.outer(t, freqs).float()
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
-    return freqs_cis
-
-
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-    """
-    Reshape frequency tensor for broadcasting it with another tensor.
-
-    This function reshapes the frequency tensor to have the same shape as the target tensor 'x'
-    for the purpose of broadcasting the frequency tensor during element-wise operations.
-
-    The input freqs_cis tensor is assumed to be of shape (max_seqlen, dim),
-    and the first seqlen elements will be sliced, but dim must match x.
-
-    Args:
-        freqs_cis (torch.Tensor): Frequency tensor to be reshaped.
-        x (torch.Tensor): Target tensor for broadcasting compatibility.
-
-    Returns:
-        torch.Tensor: Reshaped frequency tensor.
-    """
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    seqlen = x.shape[1]
-    freqs_cis = freqs_cis[0:seqlen]
-    assert freqs_cis.shape == (seqlen, x.shape[-1])
-    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
-
-
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary embeddings to input tensors using the given frequency tensor.
-
-    This function applies rotary embeddings to the given query 'xq' and key 'xk' tensors using the provided
-    frequency tensor 'freqs_cis'. The input tensors are reshaped as complex numbers, and the frequency tensor
-    is reshaped for broadcasting compatibility. The resulting tensors contain rotary embeddings and are
-    returned as real tensors.
-
-    Args:
-        xq (torch.Tensor): Query tensor to apply rotary embeddings.
-        xk (torch.Tensor): Key tensor to apply rotary embeddings.
-        freqs_cis (torch.Tensor): Precomputed frequency tensor for complex exponentials.
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]: Tuple of modified query tensor and key tensor with rotary embeddings.
-    """
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
-    return xq_out.type_as(xq), xk_out.type_as(xk)
-
+# REMOVED: precompute_freqs_cis, reshape_for_broadcast, and apply_rotary_emb functions
 
 def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
     """torch.repeat_interleave(x, dim=2, repeats=n_rep)"""
@@ -132,7 +49,8 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 class Attention(nn.Module):
     """
-    Multi-head attention module.
+    Multi-head attention module without rotary embeddings.
+    Uses learned absolute positional embeddings instead.
 
     Args:
         model_args (ModelArgs): Model configuration arguments.
@@ -151,7 +69,6 @@ class Attention(nn.Module):
 
     def __init__(self, model_args: ModelArgs):
         super().__init__()
-        self.attn_mult = model_args.attention_multiplier
         self.n_heads = model_args.n_heads
         self.n_kv_heads = (
             model_args.n_heads
@@ -164,8 +81,12 @@ class Attention(nn.Module):
         self.wq = nn.Linear(
             model_args.dim, model_args.n_heads * self.head_dim, bias=False
         )
-        self.wk = nn.Linear(model_args.dim, self.n_kv_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(model_args.dim, self.n_kv_heads * self.head_dim, bias=False)
+        self.wk = nn.Linear(
+            model_args.dim, self.n_kv_heads * self.head_dim, bias=False
+        )
+        self.wv = nn.Linear(
+            model_args.dim, self.n_kv_heads * self.head_dim, bias=False
+        )
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
         )
@@ -178,14 +99,13 @@ class Attention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        freqs_cis: torch.Tensor,
+        # freqs_cis argument removed
     ):
         """
-        Forward pass of the attention module.
+        Forward pass of the attention module without rotary embeddings.
 
         Args:
             x (torch.Tensor): Input tensor.
-            freqs_cis (torch.Tensor): Precomputed frequency tensor.
 
         Returns:
             torch.Tensor: Output tensor after attention.
@@ -201,18 +121,21 @@ class Attention(nn.Module):
         xk = xk.view(bs, seqlen, -1, self.head_dim)
         xv = xv.view(bs, seqlen, -1, self.head_dim)
 
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        # REMOVED: rotary embedding application
+        # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
         values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
 
         xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        xk = keys.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        xv = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        keys = keys.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        values = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
 
         # we use casual mask for training
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True, scale=self.attn_mult)
+        output = F.scaled_dot_product_attention(
+            xq, keys, values, is_causal=True, scale=self.attn_mult
+        )
         output = output.transpose(
             1, 2
         ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
@@ -256,7 +179,7 @@ class FeedForward(nn.Module):
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
 
     def forward(self, x):
-        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+        return self.w2(F.gelu(self.w1(x)) * self.w3(x))
 
     def init_weights(self, init_std: float):
         nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.02)
@@ -266,7 +189,7 @@ class FeedForward(nn.Module):
 
 class TransformerBlock(nn.Module):
     """
-    TransformerBlock Module
+    TransformerBlock Module without rotary embeddings
 
     Args:
         layer_id (int): Identifier for the layer.
@@ -314,21 +237,20 @@ class TransformerBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        freqs_cis: torch.Tensor,
+        # freqs_cis argument removed
     ):
         """
-        Perform a forward pass through the TransformerBlock.
+        Perform a forward pass through the TransformerBlock without rotary embeddings.
 
         Args:
             x (torch.Tensor): Input tensor.
-            freqs_cis (torch.Tensor): Precomputed cosine and sine frequencies.
 
         Returns:
             torch.Tensor: Output tensor after applying attention and feedforward layers.
 
         """
         residual = x
-        h = self.attention(self.attention_norm(x), freqs_cis)
+        h = self.attention(self.attention_norm(x))  # freqs_cis removed
         h = residual + h * self.res_mult
 
         residual = h
@@ -345,7 +267,7 @@ class TransformerBlock(nn.Module):
 
 class Transformer(nn.Module):
     """
-    Transformer Module
+    Transformer Module with learned positional embeddings instead of rotary embeddings.
 
     Args:
         model_args (ModelArgs): Model configuration arguments.
@@ -354,11 +276,11 @@ class Transformer(nn.Module):
         model_args (ModelArgs): Model configuration arguments.
         vocab_size (int): Vocabulary size.
         n_layers (int): Number of layers in the model.
-        tok_embeddings (ParallelEmbedding): Token embeddings.
+        tok_embeddings (Embedding): Token embeddings.
+        pos_embeddings (Embedding): Positional embeddings.
         layers (torch.nn.ModuleList): List of Transformer blocks.
         norm (RMSNorm): Layer normalization for the model output.
-        output (ColumnParallelLinear): Linear layer for final output.
-        freqs_cis (torch.Tensor): Precomputed cosine and sine frequencies.
+        output (Linear): Linear layer for final output.
 
     """
 
@@ -367,21 +289,12 @@ class Transformer(nn.Module):
         self.model_args = model_args
         self.vocab_size = model_args.vocab_size
         self.n_layers = model_args.n_layers
-
-        # Granite specific params
-        self.logits_scaling = model_args.logits_scaling
-        self.embedding_multiplier = model_args.embedding_multiplier
+        self.max_seq_len = model_args.max_seq_len
 
         self.tok_embeddings = nn.Embedding(model_args.vocab_size, model_args.dim)
-
-        # TODO persistent should be set to false, since this buffer can be recomputed.
-        # however, we set it to true for 2 reasons.  (1) due to pytorch/pytorch#123411,
-        # compile or pipeline-tracer will not correctly handle non-persistent buffers,
-        # so we need to fix that.  (2) if we initialize pipeline-parallel models from
-        # a seed checkpoint rather than calling init_weights, we need freqs_cis to be
-        # initialized by the checkpoint, or we need to add a separate initializer for
-        # just the non-persistent buffers that is called after loading checkpoints.
-        self.register_buffer("freqs_cis", self._precompute_freqs_cis(), persistent=True)
+        
+        # Add positional embeddings
+        self.pos_embeddings = nn.Embedding(model_args.max_seq_len, model_args.dim)
 
         self.layers = torch.nn.ModuleDict()
         for layer_id in range(model_args.n_layers):
@@ -409,16 +322,19 @@ class Transformer(nn.Module):
         ``init_weights``. We only call it in the constructor of this
         ``Transformer`` root module to avoid reinitializing tensors.
         """
-        buffer_device = buffer_device or self.freqs_cis.device
-        with torch.device(buffer_device):
-            self.freqs_cis = self._precompute_freqs_cis()
         if self.tok_embeddings is not None:
             nn.init.normal_(self.tok_embeddings.weight)
+        if self.pos_embeddings is not None:
+            # Might need std and mean
+            nn.init.normal_(self.pos_embeddings.weight)
+
         for layer in self.layers.values():
             if layer is not None:
                 layer.init_weights()
+                
         if self.norm is not None:
             self.norm.reset_parameters()
+            
         final_out_std = self.model_args.dim**-0.5
         cutoff_factor = 3
         if self.output is not None:
@@ -430,19 +346,9 @@ class Transformer(nn.Module):
                 b=cutoff_factor * final_out_std,
             )
 
-    def _precompute_freqs_cis(self) -> torch.Tensor:
-        return precompute_freqs_cis(
-            self.model_args.dim // self.model_args.n_heads,
-            # Need to compute until at least the max token limit for generation
-            # TODO: explain in docs/composability.md why we removed the 2x
-            # relaxing in our CP enablement PR
-            self.model_args.max_seq_len,
-            self.model_args.rope_theta,
-        )
-
     def forward(self, tokens: torch.Tensor):
         """
-        Perform a forward pass through the Transformer model.
+        Perform a forward pass through the Transformer model with learned positional embeddings.
 
         Args:
             tokens (torch.Tensor): Input token indices.
@@ -451,15 +357,22 @@ class Transformer(nn.Module):
             torch.Tensor: Output logits after applying the Transformer model.
 
         """
-        # passthrough for nonexistent layers, allows easy configuration of pipeline parallel stages
-        h = self.tok_embeddings(tokens) * self.embedding_multiplier if self.tok_embeddings else tokens
+        bs, seqlen = tokens.shape
+        assert seqlen <= self.max_seq_len, "Sequence length exceeds model capacity"
+        
+        token_emb = self.tok_embeddings(tokens)
+        
+        # Create position indices [0, 1, 2, ..., seqlen-1]
+        positions = torch.arange(0, seqlen, device=tokens.device).unsqueeze(0)
+        pos_emb = self.pos_embeddings(positions)
+        
+        h = token_emb + pos_emb
 
         for layer in self.layers.values():
-            h = layer(h, self.freqs_cis)
+            h = layer(h)  # freqs_cis removed
 
         h = self.norm(h) if self.norm else h
         output = self.output(h) if self.output else h
-        output = output/self.logits_scaling
         return output
 
     @classmethod
