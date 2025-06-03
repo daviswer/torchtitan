@@ -23,6 +23,7 @@ llama3_configs = {
     ),
     "20B": ModelArgs( # Granite code instruct flavor
         dim=6144,
+        max_seq_len=8192,
         n_layers=52,
         n_heads=48,
         n_kv_heads=48,
