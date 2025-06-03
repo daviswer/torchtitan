@@ -210,7 +210,6 @@ class TransformerBlock(nn.Module):
 
     def __init__(self, layer_id: int, model_args: ModelArgs):
         super().__init__()
-        self.res_mult = model_args.residual_multiplier
         self.n_heads = model_args.n_heads
         self.dim = model_args.dim
         self.attention = Attention(model_args)
