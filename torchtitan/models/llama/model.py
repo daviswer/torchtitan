@@ -50,60 +50,62 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 class Attention(nn.Module):
     """
-    Multi-head attention module without rotary embeddings.
-    Uses learned absolute positional embeddings instead.
+    Updated attention module to match GPT Big Code architecture
+    with combined Q/K/V projection and multi-query support
 
     Args:
         model_args (ModelArgs): Model configuration arguments.
 
     Attributes:
-        n_kv_heads (int): Number of key and value heads.
-        n_heads (int): Number of query heads.
-        n_rep (int): Number of repetitions for local heads.
-        head_dim (int): Dimension size of each attention head.
-        wq (Linear): Linear transformation for queries.
-        wk (Linear): Linear transformation for keys.
-        wv (Linear): Linear transformation for values.
-        wo (Linear): Linear transformation for output.
-
+        embed_dim (int): Embedding dimension of the model
+        num_heads (int): Number of query heads
+        head_dim (int): Dimension size of each attention head
+        kv_heads (int): Number of key/value heads (1 for multi-query)
+        kv_dim (int): Dimension of key/value projections
+        c_attn (Linear): Combined Q/K/V linear transformation
+        c_proj (Linear): Output linear transformation
     """
 
     def __init__(self, model_args: ModelArgs):
         super().__init__()
-        self.n_heads = model_args.n_heads
-        self.n_kv_heads = (
-            model_args.n_heads
-            if model_args.n_kv_heads is None
-            else model_args.n_kv_heads
-        )
-        self.n_rep = self.n_heads // self.n_kv_heads
+        self.embed_dim = model_args.dim
+        self.num_heads = model_args.n_heads
         self.head_dim = model_args.dim // model_args.n_heads
-
-        self.wq = nn.Linear(
-            model_args.dim, model_args.n_heads * self.head_dim, bias=False
+        self.kv_heads = 1 # For multi query
+        self.kv_dim = self.kv_heads * self.head_dim
+        
+        # Combined Q/K/V projection
+        self.c_attn = nn.Linear(
+            model_args.dim, 
+            self.embed_dim + 2 * self.kv_dim,  # Q + K + V
+            bias=True
         )
-        self.wk = nn.Linear(
-            model_args.dim, 128, bias=False
+        
+        # Output projection
+        self.c_proj = nn.Linear(
+            self.embed_dim,
+            self.embed_dim,
+            bias=True
         )
-        self.wv = nn.Linear(
-            model_args.dim, 128, bias=False
-        )
-        self.wo = nn.Linear(
-            model_args.n_heads * self.head_dim, model_args.dim, bias=False
-        )
+        
+        # Attention scaling factor
+        self.scale = 1.0 / (self.head_dim ** 0.5)
 
     def init_weights(self, init_std: float):
-        for linear in (self.wq, self.wk, self.wv):
-            nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
-        nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
+        # Initialize combined Q/K/V layer
+        nn.init.trunc_normal_(self.c_attn.weight, mean=0.0, std=0.02)
+        nn.init.zeros_(self.c_attn.bias)
+        
+        # Initialize output layer
+        nn.init.trunc_normal_(self.c_proj.weight, mean=0.0, std=init_std)
+        nn.init.zeros_(self.c_proj.bias)
 
     def forward(
         self,
         x: torch.Tensor,
-        # freqs_cis argument removed
     ):
         """
-        Forward pass of the attention module without rotary embeddings.
+        Forward pass with multi-query attention support
 
         Args:
             x (torch.Tensor): Input tensor.
@@ -113,35 +115,42 @@ class Attention(nn.Module):
 
         """
         bs, seqlen, _ = x.shape
-        xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
-
-        # Use -1 instead of `n_heads` (or `n_kv_heads`) to infer the actual
-        # local heads from sizes of xq, xk, and xv as TP may have sharded them
-        # after the above linear ops.
-        xq = xq.view(bs, seqlen, -1, self.head_dim)
-        xk = xk.view(bs, seqlen, -1, self.head_dim)
-        xv = xv.view(bs, seqlen, -1, self.head_dim)
-
-        # REMOVED: rotary embedding application
-        # xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
-
-        # repeat k/v heads if n_kv_heads < n_heads
-        keys = repeat_kv(xk, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
-        values = repeat_kv(xv, self.n_rep)  # (bs, seqlen, n_local_heads, head_dim)
-
-        xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        keys = keys.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        values = values.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-
-        # we use casual mask for training
+        
+        # Combined Q/K/V projection
+        qkv = self.c_attn(x)
+        
+        # Split into query, key, value
+        query, key_value = qkv.split([self.embed_dim, 2 * self.kv_dim], dim=2)
+        key, value = key_value.split([self.kv_dim, self.kv_dim], dim=2)
+        
+        # Reshape tensors for attention
+        query = query.view(bs, seqlen, self.num_heads, self.head_dim)
+        key = key.view(bs, seqlen, self.kv_heads, self.head_dim)
+        value = value.view(bs, seqlen, self.kv_heads, self.head_dim)
+        
+        # For multi-query attention, repeat K/V for all heads
+        if self.kv_heads == 1 and self.num_heads > 1:
+            key = key.repeat(1, 1, self.num_heads, 1)
+            value = value.repeat(1, 1, self.num_heads, 1)
+        
+        # Transpose for attention computation
+        query = query.transpose(1, 2)  # (bs, num_heads, seqlen, head_dim)
+        key = key.transpose(1, 2)      # (bs, num_heads, seqlen, head_dim)
+        value = value.transpose(1, 2)  # (bs, num_heads, seqlen, head_dim)
+        
+        # Scaled dot-product attention
         output = F.scaled_dot_product_attention(
-            xq, keys, values, is_causal=True, scale=self.attn_mult
+            query, key, value, 
+            is_causal=True,
+            scale=self.scale
         )
-        output = output.transpose(
-            1, 2
-        ).contiguous()  # (bs, seqlen, n_local_heads, head_dim)
-        output = output.view(bs, seqlen, -1)
-        return self.wo(output)
+        
+        # Merge heads
+        output = output.transpose(1, 2).contiguous()
+        output = output.view(bs, seqlen, self.embed_dim)
+        
+        # Project back to embedding dimension
+        return self.c_proj(output)
 
 
 class FeedForward(nn.Module):
