@@ -27,7 +27,7 @@ llama3_configs = {
         n_layers=52,
         n_heads=48,
         n_kv_heads=48,
-        ffn_dim_multiplier=4.0,
+        ffn_dim_multiplier=1.5,
         multiple_of=256,
         rope_theta=500000,
     ),
