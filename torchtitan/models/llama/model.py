@@ -261,11 +261,11 @@ class TransformerBlock(nn.Module):
         """
         residual = x
         h = self.attention(self.attention_norm(x))  # freqs_cis removed
-        h = residual + h * self.res_mult
+        h = residual + h
 
         residual = h
         ff_out = self.feed_forward(self.ffn_norm(h))
-        out = residual + ff_out * self.res_mult
+        out = residual + ff_out
         return out
 
     def init_weights(self):
