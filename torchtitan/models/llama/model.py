@@ -83,10 +83,10 @@ class Attention(nn.Module):
             model_args.dim, model_args.n_heads * self.head_dim, bias=False
         )
         self.wk = nn.Linear(
-            model_args.dim, self.n_kv_heads * self.head_dim, bias=False
+            model_args.dim, 128, bias=False
         )
         self.wv = nn.Linear(
-            model_args.dim, self.n_kv_heads * self.head_dim, bias=False
+            model_args.dim, 128, bias=False
         )
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
@@ -175,17 +175,18 @@ class FeedForward(nn.Module):
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
-        self.w1 = nn.Linear(dim, hidden_dim, bias=False)
-        self.w2 = nn.Linear(hidden_dim, dim, bias=False)
-        self.w3 = nn.Linear(dim, hidden_dim, bias=False)
+        self.c_fc = nn.Linear(dim, hidden_dim, bias=True)
+        self.c_proj = nn.Linear(hidden_dim, dim, bias=True)
 
     def forward(self, x):
-        return self.w2(F.gelu(self.w1(x)) * self.w3(x))
+        return self.c_proj(F.gelu(self.c_fc(x)))
 
     def init_weights(self, init_std: float):
-        nn.init.trunc_normal_(self.w1.weight, mean=0.0, std=0.02)
-        for linear in (self.w2, self.w3):
-            nn.init.trunc_normal_(linear.weight, mean=0.0, std=init_std)
+        nn.init.trunc_normal_(self.c_fc.weight, mean=0.0, std=0.02)
+        nn.init.trunc_normal_(self.c_proj.weight, mean=0.0, std=init_std)
+        # Initialize biases to zero
+        nn.init.zeros_(self.c_fc.bias)
+        nn.init.zeros_(self.c_proj.bias)
 
 
 class TransformerBlock(nn.Module):
