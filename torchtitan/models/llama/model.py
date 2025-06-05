@@ -64,6 +64,8 @@ class Attention(nn.Module):
         kv_dim (int): Dimension of key/value projections
         c_attn (Linear): Combined Q/K/V linear transformation
         c_proj (Linear): Output linear transformation
+        attn_dropout (Dropout): Attention dropout layer
+        resid_dropout (Dropout): Residual dropout layer
     """
 
     def __init__(self, model_args: ModelArgs):
@@ -87,6 +89,10 @@ class Attention(nn.Module):
             self.embed_dim,
             bias=True
         )
+        
+        # Dropout layers
+        self.attn_dropout = nn.Dropout(0.1)
+        self.resid_dropout = nn.Dropout(0.1)
         
         # Attention scaling factor
         self.scale = 1.0 / (self.head_dim ** 0.5)
@@ -149,8 +155,9 @@ class Attention(nn.Module):
         output = output.transpose(1, 2).contiguous()
         output = output.view(bs, seqlen, self.embed_dim)
         
-        # Project back to embedding dimension
-        return self.c_proj(output)
+        # Project back to embedding dimension and apply residual dropout
+        output = self.c_proj(output)
+        return self.resid_dropout(output)
 
 
 class FeedForward(nn.Module):
@@ -164,10 +171,9 @@ class FeedForward(nn.Module):
         ffn_dim_multiplier (Optional[float]): Custom multiplier for hidden dimension. Defaults to None.
 
     Attributes:
-        w1 (Linear): Linear transformation for the first layer.
-        w2 (Linear): Linear transformation for the second layer.
-        w3 (Linear): Linear transformation for the third layer.
-
+        c_fc (Linear): Linear transformation for the first layer.
+        c_proj (Linear): Linear transformation for the second layer.
+        dropout (Dropout): Dropout layer after activation.
     """
 
     def __init__(
@@ -186,9 +192,12 @@ class FeedForward(nn.Module):
 
         self.c_fc = nn.Linear(dim, hidden_dim, bias=True)
         self.c_proj = nn.Linear(hidden_dim, dim, bias=True)
+        self.dropout = nn.Dropout(0.1)  # Add dropout layer
 
     def forward(self, x):
-        return self.c_proj(F.gelu(self.c_fc(x)))
+        h = F.gelu(self.c_fc(x))
+        h = self.dropout(h)  # Apply dropout after activation
+        return self.c_proj(h)
 
     def init_weights(self, init_std: float):
         nn.init.trunc_normal_(self.c_fc.weight, mean=0.0, std=0.02)
@@ -213,9 +222,8 @@ class TransformerBlock(nn.Module):
         attention (Attention): Attention module.
         feed_forward (FeedForward): FeedForward module.
         layer_id (int): Identifier for the layer.
-        attention_norm (RMSNorm): Layer normalization for attention output.
-        ffn_norm (RMSNorm): Layer normalization for feedforward output.
-
+        ln_1 (LayerNorm): Layer normalization for attention input.
+        ln_2 (LayerNorm): Layer normalization for feedforward input.
     """
 
     def __init__(self, layer_id: int, model_args: ModelArgs):
@@ -232,10 +240,10 @@ class TransformerBlock(nn.Module):
         self.layer_id = layer_id
         self.num_layers = model_args.n_layers
 
-        self.attention_norm = build_norm(
+        self.ln_1 = build_norm(
             model_args.norm_type, dim=model_args.dim, eps=model_args.norm_eps
         )
-        self.ffn_norm = build_norm(
+        self.ln_2 = build_norm(
             model_args.norm_type, dim=model_args.dim, eps=model_args.norm_eps
         )
 
@@ -247,7 +255,6 @@ class TransformerBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        # freqs_cis argument removed
     ):
         """
         Perform a forward pass through the TransformerBlock without rotary embeddings.
@@ -260,17 +267,19 @@ class TransformerBlock(nn.Module):
 
         """
         residual = x
-        h = self.attention(self.attention_norm(x))  # freqs_cis removed
-        h = residual + h
+        h = self.ln_1(x)
+        attn_output = self.attention(h)
+        h = residual + attn_output
 
         residual = h
-        ff_out = self.feed_forward(self.ffn_norm(h))
-        out = residual + ff_out
-        return out
+        h = self.ln_2(h)
+        ff_output = self.feed_forward(h)
+        h = residual + ff_output
+        return h
 
     def init_weights(self):
-        for norm in (self.attention_norm, self.ffn_norm):
-            norm.reset_parameters()
+        self.ln_1.reset_parameters()
+        self.ln_2.reset_parameters()
         self.attention.init_weights(self.weight_init_std)
         self.feed_forward.init_weights(self.weight_init_std)
 
@@ -288,8 +297,9 @@ class Transformer(nn.Module):
         n_layers (int): Number of layers in the model.
         tok_embeddings (Embedding): Token embeddings.
         pos_embeddings (Embedding): Positional embeddings.
+        drop (Dropout): Embedding dropout layer.
         layers (torch.nn.ModuleList): List of Transformer blocks.
-        norm (RMSNorm): Layer normalization for the model output.
+        ln_f (LayerNorm): Final layer normalization.
         output (Linear): Linear layer for final output.
 
     """
@@ -302,15 +312,14 @@ class Transformer(nn.Module):
         self.max_seq_len = model_args.max_seq_len
 
         self.tok_embeddings = nn.Embedding(model_args.vocab_size, model_args.dim)
-        
-        # Add positional embeddings
         self.pos_embeddings = nn.Embedding(model_args.max_seq_len, model_args.dim)
+        self.drop = nn.Dropout(0.1)
 
         self.layers = torch.nn.ModuleDict()
         for layer_id in range(model_args.n_layers):
             self.layers[str(layer_id)] = TransformerBlock(layer_id, model_args)
 
-        self.norm = build_norm(
+        self.ln_f = build_norm(
             model_args.norm_type, dim=model_args.dim, eps=model_args.norm_eps
         )
 
@@ -333,17 +342,16 @@ class Transformer(nn.Module):
         ``Transformer`` root module to avoid reinitializing tensors.
         """
         if self.tok_embeddings is not None:
-            nn.init.normal_(self.tok_embeddings.weight)
+            nn.init.normal_(self.tok_embeddings.weight, std=0.02)
         if self.pos_embeddings is not None:
-            # Might need std and mean
-            nn.init.normal_(self.pos_embeddings.weight)
+            nn.init.normal_(self.pos_embeddings.weight, std=0.02)
 
         for layer in self.layers.values():
             if layer is not None:
                 layer.init_weights()
                 
-        if self.norm is not None:
-            self.norm.reset_parameters()
+        if self.ln_f is not None:
+            self.ln_f.reset_parameters()
             
         final_out_std = self.model_args.dim**-0.5
         cutoff_factor = 3
@@ -377,13 +385,13 @@ class Transformer(nn.Module):
         pos_emb = self.pos_embeddings(positions)
         
         h = token_emb + pos_emb
+        h = self.drop(h)
 
         for layer in self.layers.values():
-            h = layer(h)  # freqs_cis removed
+            h = layer(h)
 
-        h = self.norm(h) if self.norm else h
-        output = self.output(h) if self.output else h
-        return output
+        h = self.ln_f(h)
+        return self.output(h)
 
     @classmethod
     def from_model_args(cls, model_args: ModelArgs) -> "Transformer":
