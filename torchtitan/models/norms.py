@@ -38,7 +38,7 @@ def build_norm(norm_type: str, dim: int, eps: float = 1e-6):
     norm_type = norm_type.lower()  # Normalize to lowercase
 
     if norm_type == "layernorm":
-        return nn.LayerNorm(dim, eps=eps, bias=False)
+        return nn.LayerNorm(dim, eps=eps, bias=True)
     elif norm_type == "np_layernorm":
         return nn.LayerNorm(dim, eps=eps, elementwise_affine=False, bias=False)
     elif norm_type == "rmsnorm":

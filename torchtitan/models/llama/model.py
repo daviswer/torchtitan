@@ -32,7 +32,7 @@ class ModelArgs:
     # If `True`, then each transformer block init uses its layer ID, and if
     # `False`, each uses the total number of transformer blocks
     depth_init: bool = True
-    norm_type: str = "rmsnorm"
+    norm_type: str = "layernorm"
 
 # REMOVED: precompute_freqs_cis, reshape_for_broadcast, and apply_rotary_emb functions
 
