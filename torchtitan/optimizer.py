@@ -72,7 +72,7 @@ def linear_warmup_linear_decay(
         curr_adjustment = float(current_step / (warmup_steps + 1))
 
     else:
-        curr_adjustment = 1 - (current_step - 242000) / (282000 - 242000) * 7/8
+        curr_adjustment = 1 - (current_step - warmup_steps) / decay_steps * 9/10
     return curr_adjustment
 
 
