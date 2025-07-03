@@ -380,10 +380,7 @@ def main(job_config: JobConfig):
             losses_since_last_log.append(loss)
 
             # log metrics
-            if (
-                train_state.step == 1
-                or train_state.step % job_config.metrics.log_freq == 0
-            ):
+            if train_state.step % job_config.metrics.log_freq == 0:
                 losses = [loss.item() for loss in losses_since_last_log]
                 avg_loss, max_loss = sum(losses) / len(losses) * 3, max(losses)
                 gnorms = [gnorm.item() for gnorm in gnorms_since_last_log]
