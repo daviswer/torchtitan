@@ -279,7 +279,6 @@ class TransformerBlock(nn.Module):
 
     def __init__(self, layer_id: int, model_args: ModelArgs):
         super().__init__()
-        self.res_mult = model_args.residual_multiplier
         self.n_heads = model_args.n_heads
         self.dim = model_args.dim
         self.attention = Attention(model_args)
@@ -320,13 +319,8 @@ class TransformerBlock(nn.Module):
             torch.Tensor: Output tensor after applying attention and feedforward layers.
 
         """
-        residual = x
-        h = self.attention(self.attention_norm(x), freqs_cis)
-        h = residual + h * self.res_mult
-
-        residual = h
-        ff_out = self.feed_forward(self.ffn_norm(h))
-        out = residual + ff_out * self.res_mult
+        h = x + self.attention(self.attention_norm(x), freqs_cis)
+        out = h + self.feed_forward(self.ffn_norm(h))
         return out
 
     def init_weights(self):
