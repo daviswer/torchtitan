@@ -6,18 +6,23 @@
 
 from torchtitan.models.llama import llama3_configs, Transformer as LlamaTransformer
 from torchtitan.models.granite import granite3_configs, Transformer as GraniteTransformer
+from torchtitan.models.gptbigcode import gptbigcode_configs, Transformer as GPTTransformer
+
 
 models_config = {
     "llama3": llama3_configs,
     "granite3": granite3_configs,
+    "gptbigcode": gptbigcode_configs,
 }
 
 model_name_to_cls = {
     "llama3": LlamaTransformer,
     "granite3": GraniteTransformer,
+    "gptbigcode": GPTTransformer,
 }
 
 model_name_to_tokenizer = {
     "llama3": "tiktoken",
     "granite3": "tiktoken",
+    "gptbigcode": "tiktoken",
 }
