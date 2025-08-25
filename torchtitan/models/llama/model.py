@@ -37,7 +37,7 @@ class ModelArgs:
     norm_type: str = "rmsnorm"
     # yarn: https://arxiv.org/pdf/2309.00071
     original_seq_len: int = 8192
-    rope_factor: float = 16 # s in 2309.00071 (I believe); see eq (25)
+    rope_factor: float = 4 # s in 2309.00071 (I believe); see eq (25)
     beta_fast: int = 32 # \alpha in 2309.00071; see around eq (23)
     beta_slow: int = 1 # \beta in 2309.00071; see around eq (23)
 
@@ -73,7 +73,7 @@ def precompute_freqs_cis(
     seq_len: int,
     original_seq_len: int,
     rope_theta: float = 10000.0,
-    rope_factor: float = 16,
+    rope_factor: float = 4,
     beta_fast: int = 32,
     beta_slow: int = 1,
 ) -> torch.Tensor:
