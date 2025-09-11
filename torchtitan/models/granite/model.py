@@ -364,7 +364,6 @@ class Transformer(nn.Module):
 
     def __init__(self, model_args: ModelArgs):
         super().__init__()
-        print("GRANITE INITIATED")
         self.model_args = model_args
         self.vocab_size = model_args.vocab_size
         self.n_layers = model_args.n_layers
