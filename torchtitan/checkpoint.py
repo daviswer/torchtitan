@@ -449,20 +449,21 @@ class CheckpointManager:
 
     def load(self, step: int = -1) -> bool:
         if self.warm_start_path is not None:
-            states = self.states["model"]
+            states = {"model": self.states["model"]}
             original_stateful_states = {
                 k: v for k, v in states.items() if isinstance(v, Stateful)
             }
             logger.info(f"Loading a warm-start checkpoint from {self.warm_start_path}.")
             begin = time.monotonic()
+            states_to_load = states["model"]
             dcp.load(
-                states,
+                states_to_load,
                 checkpoint_id=self.warm_start_path,
             )
             logger.info(
                 f"Finished loading the checkpoint in {time.monotonic() - begin:.2f} seconds."
             )
-            states = {"model": states}
+            states = {"model": states_to_load}
             states.update(original_stateful_states)
             return True
 
