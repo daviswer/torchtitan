@@ -455,15 +455,15 @@ class CheckpointManager:
             }
             logger.info(f"Loading a warm-start checkpoint from {self.warm_start_path}.")
             begin = time.monotonic()
-            states_to_load = states["model"]
+            states_to_load = self.states["model"].state_dict()
             dcp.load(
                 states_to_load,
                 checkpoint_id=self.warm_start_path,
             )
+            self.states["model"].load_state_dict(states_to_load)
             logger.info(
                 f"Finished loading the checkpoint in {time.monotonic() - begin:.2f} seconds."
             )
-            states = {"model": states_to_load}
             states.update(original_stateful_states)
             return True
 
