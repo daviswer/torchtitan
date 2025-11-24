@@ -92,7 +92,7 @@ class RescalableDataset(IterableDataset, Stateful):
         self.path = snapshot_download(
             repo_id="HuggingFaceTB/cosmopedia", 
             repo_type="dataset", 
-            allow_patterns=["cosmopedia/data/wikihow/*", "cosmopedia/data/openstax/*"],
+            allow_patterns=["data/wikihow/*", "data/openstax/*"],
             cache_dir=os.path.join(dataset_path, dataset_name),
         )
         fhandler = ParquetHandler(tokenizer)
