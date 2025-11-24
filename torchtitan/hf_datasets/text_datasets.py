@@ -7,6 +7,7 @@
 from functools import partial
 from typing import Any, Callable
 
+import os
 import torch
 
 from datasets import Dataset, load_dataset
@@ -19,6 +20,16 @@ from torchtitan.components.tokenizer import BaseTokenizer
 from torchtitan.config import JobConfig
 from torchtitan.hf_datasets import DatasetConfig
 from torchtitan.tools.logging import logger
+
+from huggingface_hub import snapshot_download
+from torchdata.scalable_reader.scalable_reader import (
+    ParquetHandler,
+    PreprocessDataset,
+    DocPackingDataset,
+    SamplingDataset,
+    ScalableReader,
+    ShuffleDataset
+)
 
 
 def _load_c4_dataset(dataset_path: str, split: str):
@@ -65,6 +76,53 @@ def _validate_dataset(
     path = dataset_path or config.path
     logger.info(f"Preparing {dataset_name} dataset from {path}")
     return path, config.loader, config.sample_processor
+
+
+class RescalableDataset(IterableDataset, Stateful):
+    def __init__(
+        self,
+        dataset_name: str,
+        dataset_path: str | None,
+        tokenizer: BaseTokenizer,
+        seq_len: int = 2048,
+        dp_rank: int = 0,
+        dp_world_size: int = 1,
+        infinite: bool = False,
+    ) -> None:
+        path = snapshot_download(
+            repo_id="HuggingFaceTB/cosmopedia", 
+            repo_type="dataset", 
+            allow_patterns=["cosmopedia/data/wikihow/*", "cosmopedia/data/openstax/*"],
+            cache_dir=os.path.join(dataset_path, dataset_name),
+        )
+        self.path = os.path.join(path, "cosmo/datasets--HuggingFaceTB--cosmopedia/snapshots/0ae6ec63f91742bd2d1eaef4f02232c55d719385/data")
+        fhandler = ParquetHandler(tokenizer)
+        # TODO: hardcoded vals -> args
+        # Base dataloader
+        data = ScalableReader(self.path, dp_rank, dp_world_size, fhandler, delimiter_token=0, seed=42, n_logical_shards=4096)
+        # Subdata sampling
+        data = SamplingDataset(self.path, data, delimiter_token=0, datasets=["wikihow","openstax"], weights=[3,5])
+        # Packing / slicing
+        data = DocPackingDataset(data, seq_len, n_pads=0, delimiter_token=0, pad_token=-1, n_bins=32)
+        # Shuffling
+        data = ShuffleDataset(data, window_size=1000)
+        # Statelessly convert all outputs to tensors
+        data = PreprocessDataset(data, torch.tensor)
+        self.data = data
+
+    def _get_data_iter(self):
+        return iter(self.data)
+    
+    def __iter__(self):
+        data = iter(self.data)
+        while True:
+            yield next(data)
+
+    def state_dict(self):
+        return self.data.state_dict()
+    
+    def load_state_dict(self, state_dict):
+        return self.data.load_state_dict(state_dict)
 
 
 class HuggingFaceTextDataset(IterableDataset, Stateful):
@@ -178,7 +236,8 @@ def build_text_dataloader(
     batch_size = job_config.training.local_batch_size
     seq_len = job_config.training.seq_len
 
-    hf_ds = HuggingFaceTextDataset(
+    # ds = HuggingFaceTextDataset(
+    ds = RescalableDataset(
         dataset_name=dataset_name,
         dataset_path=dataset_path,
         tokenizer=tokenizer,
@@ -189,7 +248,7 @@ def build_text_dataloader(
     )
 
     return ParallelAwareDataloader(
-        dataset=hf_ds,
+        dataset=ds,
         dp_rank=dp_rank,
         dp_world_size=dp_world_size,
         batch_size=batch_size,
