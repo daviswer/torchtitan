@@ -23,12 +23,12 @@ from torchtitan.tools.logging import logger
 
 from huggingface_hub import snapshot_download
 from torchdata.scalable_reader import (
-    ParquetHandler,
     PreprocessDataset,
     DocPackingDataset,
     SamplingDataset,
     ScalableReader,
-    ShuffleDataset
+    ShuffleDataset,
+    ParquetHandler,
 )
 
 
