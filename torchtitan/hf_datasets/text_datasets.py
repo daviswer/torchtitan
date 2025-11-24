@@ -22,7 +22,7 @@ from torchtitan.hf_datasets import DatasetConfig
 from torchtitan.tools.logging import logger
 
 from huggingface_hub import snapshot_download
-from torchdata.scalable_reader.scalable_reader import (
+from torchdata.scalable_reader import (
     ParquetHandler,
     PreprocessDataset,
     DocPackingDataset,
