@@ -231,6 +231,9 @@ def build_text_dataloader(
     infinite: bool = True,
 ) -> ParallelAwareDataloader:
     """Build a data loader for HuggingFace datasets."""
+
+    print(".   GOT INTO TEXT DATALOADER BUILDER")
+
     dataset_name = job_config.training.dataset
     dataset_path = job_config.training.dataset_path
     batch_size = job_config.training.local_batch_size
