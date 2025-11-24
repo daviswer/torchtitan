@@ -103,11 +103,13 @@ class RescalableDataset(IterableDataset, Stateful):
         # Subdata sampling
         data = SamplingDataset(self.path, data, delimiter_token=0, datasets=["wikihow","openstax"], weights=[3,5])
         # Packing / slicing
-        data = DocPackingDataset(data, seq_len, n_pads=0, delimiter_token=0, pad_token=-1, n_bins=32)
+        data = DocPackingDataset(data, seq_len+1, n_pads=0, delimiter_token=0, pad_token=-1, n_bins=32)
         # Shuffling
         data = ShuffleDataset(data, window_size=1000)
         # Statelessly convert all outputs to tensors
         data = PreprocessDataset(data, torch.tensor)
+        # Split sequence into input and target
+        data = PreprocessDataset(data, lambda x: (x[:-1], x[1:]))
         self.data = data
 
     def _get_data_iter(self):
