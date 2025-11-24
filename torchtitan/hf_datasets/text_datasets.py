@@ -99,7 +99,7 @@ class RescalableDataset(IterableDataset, Stateful):
         fhandler = ParquetHandler(tokenizer)
         # TODO: hardcoded vals -> args
         # Base dataloader
-        data = ScalableReader(self.path, dp_rank, dp_world_size, fhandler, delimiter_token=0, seed=42, n_logical_shards=4096)
+        data = ScalableReader(self.path, dp_rank, dp_world_size, fhandler, delimiter_token=0, n_logical_shards=4096)
         # Subdata sampling
         data = SamplingDataset(self.path, data, delimiter_token=0, datasets=["wikihow","openstax"], weights=[3,5])
         # Packing / slicing
@@ -231,9 +231,6 @@ def build_text_dataloader(
     infinite: bool = True,
 ) -> ParallelAwareDataloader:
     """Build a data loader for HuggingFace datasets."""
-
-    print(".   GOT INTO TEXT DATALOADER BUILDER")
-
     dataset_name = job_config.training.dataset
     dataset_path = job_config.training.dataset_path
     batch_size = job_config.training.local_batch_size

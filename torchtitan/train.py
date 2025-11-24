@@ -33,8 +33,6 @@ from torchtitan.tools.profiling import (
     maybe_enable_profiling,
 )
 
-print(".   STARTING")
-
 class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     # core configs
     job_config: JobConfig
@@ -121,8 +119,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             if self.train_spec.build_tokenizer_fn is not None
             else None
         )
-
-        print(".   GOT INTO DATALOADER BUILDING")
         self.dataloader = self.train_spec.build_dataloader_fn(
             dp_world_size=dp_degree,
             dp_rank=dp_rank,
