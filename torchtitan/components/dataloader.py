@@ -68,6 +68,7 @@ class ParallelAwareDataloader(StatefulDataLoader, BaseDataLoader):
         batch_size: int,
         collate_fn: Callable | None = None,
     ):
+        print(".   GOT INTO PARALLELAWARE DL")
         self.dp_world_size = dp_world_size
         self.dp_rank = dp_rank
         self.batch_size = batch_size
