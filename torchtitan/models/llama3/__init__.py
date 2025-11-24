@@ -70,6 +70,7 @@ llama3_args = {
 
 
 def get_train_spec() -> TrainSpec:
+    print(".   GOT INTO LLAMA3 TRAIN SPEC")
     return TrainSpec(
         model_cls=Transformer,
         model_args=llama3_args,
