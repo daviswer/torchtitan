@@ -33,6 +33,7 @@ from torchtitan.tools.profiling import (
     maybe_enable_profiling,
 )
 
+print(".   STARTING")
 
 class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     # core configs
