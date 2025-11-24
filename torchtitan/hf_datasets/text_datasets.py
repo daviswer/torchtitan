@@ -109,7 +109,7 @@ class RescalableDataset(IterableDataset, Stateful):
         # Statelessly convert all outputs to tensors
         data = PreprocessDataset(data, torch.tensor)
         # Split sequence into input and target
-        data = PreprocessDataset(data, lambda x: (x[:-1], x[1:]))
+        data = PreprocessDataset(data, lambda x: ({"input":x[:-1]}, x[1:]))
         self.data = data
 
     def _get_data_iter(self):
