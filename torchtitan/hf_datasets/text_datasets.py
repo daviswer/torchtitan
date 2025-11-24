@@ -89,13 +89,12 @@ class RescalableDataset(IterableDataset, Stateful):
         dp_world_size: int = 1,
         infinite: bool = False,
     ) -> None:
-        path = snapshot_download(
+        self.path = snapshot_download(
             repo_id="HuggingFaceTB/cosmopedia", 
             repo_type="dataset", 
             allow_patterns=["cosmopedia/data/wikihow/*", "cosmopedia/data/openstax/*"],
             cache_dir=os.path.join(dataset_path, dataset_name),
         )
-        self.path = os.path.join(path, "cosmo/datasets--HuggingFaceTB--cosmopedia/snapshots/0ae6ec63f91742bd2d1eaef4f02232c55d719385/data")
         fhandler = ParquetHandler(tokenizer)
         # TODO: hardcoded vals -> args
         # Base dataloader
