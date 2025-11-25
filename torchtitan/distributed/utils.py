@@ -279,6 +279,7 @@ def init_distributed(
             )
         if enable_cpu_backend:
             backend = f"{device_type}:{backend},cpu:gloo"
+            print(".   ", backend)
         return backend
 
     TRACE_BUFFER_SIZE = "TORCH_FR_BUFFER_SIZE"
