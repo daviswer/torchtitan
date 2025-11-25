@@ -776,9 +776,6 @@ class CheckpointManager:
             )
         else:
             logger.info(f"Saving a full checkpoint at last step, step {curr_step}.")
-            print(self.states.keys())
-            time.sleep(1)
-            print(self.states)
             states = self._flattened_model_states_sd()
 
         if self.last_save_in_hf:
