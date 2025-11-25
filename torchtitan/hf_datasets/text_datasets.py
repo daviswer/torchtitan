@@ -79,59 +79,38 @@ def _validate_dataset(
     return path, config.loader, config.sample_processor
 
 
-class RescalableDataset(IterableDataset, Stateful):
-    def __init__(
-        self,
-        dataset_name: str,
-        dataset_path: str | None,
-        tokenizer: BaseTokenizer,
-        seq_len: int = 2048,
-        dp_rank: int = 0,
-        dp_world_size: int = 1,
-        infinite: bool = False,
-    ) -> None:
-        path = snapshot_download(
-            repo_id="HuggingFaceTB/cosmopedia", 
-            repo_type="dataset", 
-            allow_patterns=["data/wikihow/*", "data/openstax/*"],
-            cache_dir=os.path.join(dataset_path, dataset_name),
-        )
-        self.path = os.path.join(path, "data")
-        fhandler = ParquetHandler(tokenizer)
-        # TODO: hardcoded vals -> args
-        # Base dataloader
-        data = ScalableReader(self.path, dp_rank, dp_world_size, fhandler, delimiter_token=0, n_logical_shards=4096)
-        # Subdata sampling
-        data = SamplingDataset(self.path, data, delimiter_token=0, datasets=["wikihow","openstax"], weights=[3,5])
-        # Packing / slicing
-        data = DocPackingDataset(data, seq_len+1, n_pads=0, delimiter_token=0, pad_token=-1, n_bins=32)
-        # Shuffling
-        data = ShuffleDataset(data, window_size=1000)
-        # Statelessly convert all outputs to tensors
-        data = PreprocessDataset(data, torch.tensor)
-        # Split sequence into input and target
-        data = PreprocessDataset(data, lambda x: ({"input":x[:-1]}, x[1:]))
-        self.data = data
-        self.rank = dp_rank
-
-    def _get_data_iter(self):
-        return iter(self.data)
+def RescalableDataset(
+    dataset_name: str,
+    dataset_path: str | None,
+    tokenizer: BaseTokenizer,
+    seq_len: int = 2048,
+    dp_rank: int = 0,
+    dp_world_size: int = 1,
+    infinite: bool = False,
+) -> None:
+    path = snapshot_download(
+        repo_id="HuggingFaceTB/cosmopedia", 
+        repo_type="dataset", 
+        allow_patterns=["data/wikihow/*", "data/openstax/*"],
+        cache_dir=os.path.join(dataset_path, dataset_name),
+    )
+    path = os.path.join(path, "data")
+    fhandler = ParquetHandler(tokenizer)
+    # TODO: hardcoded vals -> args
+    # Base dataloader
+    data = ScalableReader(path, dp_rank, dp_world_size, fhandler, delimiter_token=0, n_logical_shards=4096)
+    # Subdata sampling
+    data = SamplingDataset(path, data, delimiter_token=0, datasets=["wikihow","openstax"], weights=[3,5])
+    # Packing / slicing
+    data = DocPackingDataset(data, seq_len+1, n_pads=0, delimiter_token=0, pad_token=-1, n_bins=32)
+    # Shuffling
+    data = ShuffleDataset(data, window_size=1000)
+    # Statelessly convert all outputs to tensors
+    data = PreprocessDataset(data, torch.tensor)
+    # Split sequence into input and target
+    data = PreprocessDataset(data, lambda x: ({"input":x[:-1]}, x[1:]))
     
-    def __iter__(self):
-        data = iter(self.data)
-        while True:
-            yield next(data)
-
-    def state_dict(self):
-        time.sleep(self.rank)
-        out = self.data.state_dict()
-        # print(out)
-        return out
-    
-    def load_state_dict(self, state_dict):
-        time.sleep(self.rank)
-        # print(state_dict)
-        return self.data.load_state_dict(state_dict)
+    return data
 
 
 class HuggingFaceTextDataset(IterableDataset, Stateful):
