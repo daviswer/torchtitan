@@ -8,6 +8,7 @@ from functools import partial
 from typing import Any, Callable
 
 import os
+import time
 import torch
 
 from datasets import Dataset, load_dataset
@@ -111,6 +112,7 @@ class RescalableDataset(IterableDataset, Stateful):
         # Split sequence into input and target
         data = PreprocessDataset(data, lambda x: ({"input":x[:-1]}, x[1:]))
         self.data = data
+        self.rank = dp_rank
 
     def _get_data_iter(self):
         return iter(self.data)
@@ -121,9 +123,14 @@ class RescalableDataset(IterableDataset, Stateful):
             yield next(data)
 
     def state_dict(self):
-        return self.data.state_dict()
+        time.sleep(self.rank)
+        out = self.data.state_dict()
+        print(out)
+        return out
     
     def load_state_dict(self, state_dict):
+        time.sleep(self.rank)
+        print(state_dict)
         return self.data.load_state_dict(state_dict)
 
 
