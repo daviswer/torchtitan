@@ -13,6 +13,7 @@ from typing import Any, Generator, Iterable
 import torch
 
 from torch.distributed.elastic.multiprocessing.errors import record
+from torch.distributed.device_mesh import init_device_mesh
 
 import torchtitan.protocols.train_spec as train_spec_module
 from torchtitan.components.checkpoint import CheckpointManager
@@ -304,7 +305,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             ),
             base_folder=job_config.job.dump_folder,
             ft_manager=self.ft_manager,
-            rescaling_mesh=world_mesh,
+            rescaling_mesh=init_device_mesh("cpu", [dp_degree]),  # TODO: hardcode -> arg (None default)
         )
 
         loss_parallel_enabled = (
