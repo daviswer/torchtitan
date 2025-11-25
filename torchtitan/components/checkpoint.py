@@ -185,9 +185,17 @@ class CheckpointManager:
         sd_adapter: BaseStateDictAdapter | None,
         base_folder: str = "",
         ft_manager: FTManager | None = None,
+        rescaling_mesh: dist.device_mesh.DeviceMesh | None = None,
     ) -> None:
         self.enable = checkpoint_config.enable
         self.load_only = checkpoint_config.load_only
+
+        self.dl = None
+        if rescaling_mesh is not None:
+            assert dataloader is not None, "Dataloader must be enabled for rescaling"
+            self.dl = dataloader
+            dataloader = None
+        self.rescaling_mesh = rescaling_mesh
 
         self.states = states
         self.states.update(
