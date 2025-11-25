@@ -389,6 +389,7 @@ class CheckpointManager:
         else:
             checkpoint_save_id = checkpoint_id
 
+        print(f".   {state_dict}")
         if async_mode == AsyncMode.ASYNC:
             ret = dcp.async_save(
                 state_dict,
