@@ -31,6 +31,7 @@ from torchdata.scalable_reader import (
     ShuffleDataset,
     ParquetHandler,
 )
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 
 def _load_c4_dataset(dataset_path: str, split: str):
@@ -235,12 +236,13 @@ def build_text_dataloader(
         infinite=infinite,
     )
 
-    return ParallelAwareDataloader(
-        dataset=ds,
-        dp_rank=dp_rank,
-        dp_world_size=dp_world_size,
-        batch_size=batch_size,
-    )
+    return StatefulDataLoader(dataset=ds, batch_size=batch_size)
+    # return ParallelAwareDataloader(
+    #     dataset=ds,
+    #     dp_rank=dp_rank,
+    #     dp_world_size=dp_world_size,
+    #     batch_size=batch_size,
+    # )
 
 
 def build_text_validation_dataloader(
