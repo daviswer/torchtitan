@@ -236,7 +236,8 @@ def build_text_dataloader(
         infinite=infinite,
     )
 
-    return StatefulDataLoader(dataset=ds, batch_size=batch_size)
+    # TODO: num_workers const -> arg
+    return StatefulDataLoader(dataset=ds, batch_size=batch_size, num_workers=1)
     # return ParallelAwareDataloader(
     #     dataset=ds,
     #     dp_rank=dp_rank,
