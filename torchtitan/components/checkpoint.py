@@ -41,6 +41,8 @@ from torchtitan.protocols import BaseStateDictAdapter
 from torchtitan.tools.logging import logger
 from torchtitan.tools.utils import GarbageCollection
 
+from torchdata.scalable_reader import load_ckpt_dcp, save_ckpt_dcp
+
 
 MODEL = "model"
 OPTIMIZER = "optimizer"
@@ -428,6 +430,10 @@ class CheckpointManager:
                 fqn_to_index_mapping=self.sd_adapter.fqn_to_index_mapping,
                 num_threads=5,
             )
+
+        # Handle rescaling dataloader separately
+        if self.rescaling_mesh is not None:
+            save_ckpt_dcp(self.dl, os.path.join(checkpoint_id, "dataloader"), self.rescaling_mesh)
 
         if enable_garbage_collection:
             GarbageCollection.collect("GC collection invoked by checkpointer.")
