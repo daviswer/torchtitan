@@ -125,12 +125,12 @@ class RescalableDataset(IterableDataset, Stateful):
     def state_dict(self):
         time.sleep(self.rank)
         out = self.data.state_dict()
-        print(out)
+        # print(out)
         return out
     
     def load_state_dict(self, state_dict):
         time.sleep(self.rank)
-        print(state_dict)
+        # print(state_dict)
         return self.data.load_state_dict(state_dict)
 
 
