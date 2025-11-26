@@ -478,6 +478,10 @@ class CheckpointManager:
             if MODEL in self.states:
                 self.states[MODEL].load_state_dict(state_dict)
 
+        # Handle rescaling dataloader separately
+        if self.rescaling_mesh is not None:
+            load_ckpt_dcp(self.dl, os.path.join(checkpoint_id, "dataloader"), self.rescaling_mesh)
+
     @torch.no_grad()
     def save(self, curr_step: int, last_step: bool = False) -> None:
         """Save the checkpoint for the current step.
