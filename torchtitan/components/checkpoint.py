@@ -445,6 +445,7 @@ class CheckpointManager:
         checkpoint_id: str,
         from_hf: bool,
         from_quantized: bool,
+        model_only: bool = False,
     ) -> None:
         """Load the checkpoint with dcp.
         Args:
@@ -479,7 +480,7 @@ class CheckpointManager:
                 self.states[MODEL].load_state_dict(state_dict)
 
         # Handle rescaling dataloader separately
-        if self.rescaling_mesh is not None:
+        if self.rescaling_mesh is not None and not model_only:
             load_ckpt_dcp(self.dl, os.path.join(checkpoint_id, "dataloader"), self.rescaling_mesh)
 
     @torch.no_grad()
@@ -648,6 +649,7 @@ class CheckpointManager:
             checkpoint_id=checkpoint_id,
             from_hf=from_hf,
             from_quantized=from_quantized,
+            model_only=model_only,
         )
         GarbageCollection.collect("GC collection for checkpoint loading.")
         logger.info(
