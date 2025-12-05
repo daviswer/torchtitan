@@ -99,13 +99,13 @@ def RescalableDataset(
     fhandler = ParquetHandler(tokenizer)
     # TODO: hardcoded vals -> args
     # Base dataloader
-    data = ScalableReader(path, dp_rank, dp_world_size, fhandler, delimiter_token=0, n_logical_shards=4096)
+    data = ScalableReader(path, dp_rank, dp_world_size, fhandler, delimiter_token=0, n_logical_shards=4096, seed=42)
     # Subdata sampling
     data = SamplingDataset(path, data, delimiter_token=0, datasets=["wikihow","openstax"], weights=[3,5])
     # Packing / slicing
     data = DocPackingDataset(data, seq_len+1, n_pads=0, delimiter_token=0, pad_token=-1, n_bins=32)
     # Shuffling
-    data = ShuffleDataset(data, window_size=1000)
+    data = ShuffleDataset(data, window_size=1000, seed=42)
     # Statelessly convert all outputs to tensors
     data = PreprocessDataset(data, torch.tensor)
     # Split sequence into input and target
