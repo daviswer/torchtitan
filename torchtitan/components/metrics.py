@@ -146,8 +146,9 @@ class WandBLogger(BaseLogger):
         self.wandb.init(
             entity=os.getenv("WANDB_TEAM", None),
             project=os.getenv("WANDB_PROJECT", "torchtitan"),
-            name=os.getenv("WANDB_RUN_NAME", None),
-            dir=log_dir,
+            id=os.getenv("WANDB_ID", None),
+            dir=os.getenv("WANDB_DIR", log_dir),
+            resume="allow",
             config=job_config.to_dict(),
         )
         logger.info("WandB logging enabled")
