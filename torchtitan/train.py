@@ -362,7 +362,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         job_config = self.job_config
         dist_utils.init_distributed(
             job_config.comm,
-            enable_cpu_backend=job_config.training.enable_cpu_offload,
+            enable_cpu_backend=True,  # job_config.training.enable_cpu_offload,  TODO: tie to dataloader flag
             base_folder=job_config.job.dump_folder,
         )
 
