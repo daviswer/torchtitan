@@ -91,6 +91,10 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         # init distributed and build meshes
         self.parallel_dims = parallel_dims = self.init_distributed()
 
+        # make logger rank0 only
+        if torch.distributed.get_rank() != 0:
+            logger.setLevel("ERROR")
+
         world_mesh = parallel_dims.world_mesh
         if parallel_dims.dp_enabled:
             dp_mesh = world_mesh["dp"]
