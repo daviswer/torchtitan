@@ -41,6 +41,8 @@ from torchtitan.protocols import BaseStateDictAdapter
 from torchtitan.tools.logging import logger
 from torchtitan.tools.utils import GarbageCollection
 
+from torchdata.scalable_reader import load_ckpt_dcp, save_ckpt_dcp
+
 
 MODEL = "model"
 OPTIMIZER = "optimizer"
@@ -185,9 +187,17 @@ class CheckpointManager:
         sd_adapter: BaseStateDictAdapter | None,
         base_folder: str = "",
         ft_manager: FTManager | None = None,
+        rescaling_mesh: dist.device_mesh.DeviceMesh | None = None,
     ) -> None:
         self.enable = checkpoint_config.enable
         self.load_only = checkpoint_config.load_only
+
+        self.dl = None
+        if rescaling_mesh is not None:
+            assert dataloader is not None, "Dataloader must be enabled for rescaling"
+            self.dl = dataloader
+            dataloader = None
+        self.rescaling_mesh = rescaling_mesh
 
         self.states = states
         self.states.update(
@@ -420,6 +430,10 @@ class CheckpointManager:
                 num_threads=5,
             )
 
+        # Handle rescaling dataloader separately
+        if self.rescaling_mesh is not None:
+            save_ckpt_dcp(self.dl, os.path.join(checkpoint_id, "dataloader"), self.rescaling_mesh)
+
         if enable_garbage_collection:
             GarbageCollection.collect("GC collection invoked by checkpointer.")
 
@@ -431,6 +445,7 @@ class CheckpointManager:
         checkpoint_id: str,
         from_hf: bool,
         from_quantized: bool,
+        model_only: bool = False,
     ) -> None:
         """Load the checkpoint with dcp.
         Args:
@@ -463,6 +478,10 @@ class CheckpointManager:
             # manually call load_state_dict() for the model. Need to fix this.
             if MODEL in self.states:
                 self.states[MODEL].load_state_dict(state_dict)
+        
+        # Handle rescaling dataloader separately
+        if self.rescaling_mesh is not None and not model_only:
+            load_ckpt_dcp(self.dl, os.path.join(checkpoint_id, "dataloader"), self.rescaling_mesh)
 
     @torch.no_grad()
     def save(self, curr_step: int, last_step: bool = False) -> None:
@@ -630,6 +649,7 @@ class CheckpointManager:
             checkpoint_id=checkpoint_id,
             from_hf=from_hf,
             from_quantized=from_quantized,
+            model_only=model_only,
         )
         GarbageCollection.collect("GC collection for checkpoint loading.")
         logger.info(
@@ -741,7 +761,7 @@ class CheckpointManager:
         """
         # For the first step, we will only load the model.
         if model_only:
-            return self.states[MODEL].state_dict()
+            return {MODEL: self.states[MODEL].state_dict()}
 
         for exclude_key in self.exclude_from_loading:
             if exclude_key not in self.states:

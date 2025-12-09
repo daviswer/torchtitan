@@ -265,6 +265,19 @@ class Training:
 
 
 @dataclass
+class Dataset:
+    num_logical_shards: int = 32768
+    datasets: str = "c4_test"
+    dataset_weights: str = "1"
+    col_name: str = "tokens"
+    spm_rate: float = 0.0
+    psm_rate: float = 0.0
+    fim_pre: int = -1
+    fim_mid: int = -1
+    fim_suf: int = -1
+
+
+@dataclass
 class Parallelism:
     data_parallel_replicate_degree: int = 1
     """
@@ -942,6 +955,7 @@ class JobConfig:
     optimizer: Optimizer = field(default_factory=Optimizer)
     lr_scheduler: LRScheduler = field(default_factory=LRScheduler)
     training: Training = field(default_factory=Training)
+    dataset: Dataset = field(default_factory=Dataset)
     parallelism: Parallelism = field(default_factory=Parallelism)
     checkpoint: Checkpoint = field(default_factory=Checkpoint)
     activation_checkpoint: ActivationCheckpoint = field(

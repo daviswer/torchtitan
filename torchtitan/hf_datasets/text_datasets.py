@@ -7,6 +7,8 @@
 from functools import partial
 from typing import Any, Callable
 
+import os
+import time
 import torch
 
 from datasets import Dataset, load_dataset
@@ -19,6 +21,18 @@ from torchtitan.components.tokenizer import BaseTokenizer
 from torchtitan.config import JobConfig
 from torchtitan.hf_datasets import DatasetConfig
 from torchtitan.tools.logging import logger
+
+from huggingface_hub import snapshot_download
+from torchdata.scalable_reader import (
+    PreprocessDataset,
+    DocPackingDataset,
+    SamplingDataset,
+    ScalableReader,
+    ShuffleDataset,
+    AutoHandler,
+    FIMDataset,
+)
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 
 def _load_c4_dataset(dataset_path: str, split: str):
@@ -65,6 +79,40 @@ def _validate_dataset(
     path = dataset_path or config.path
     logger.info(f"Preparing {dataset_name} dataset from {path}")
     return path, config.loader, config.sample_processor
+
+
+def RescalableDataset(
+    cfg: JobConfig,
+    tokenizer: BaseTokenizer,
+    dp_rank: int = 0,
+    dp_world_size: int = 1,
+) -> None:
+    datasets, weights, col_names = parse_data_args(
+        cfg.dataset.datasets, cfg.dataset.dataset_weights, cfg.dataset.col_name
+    )
+    # Get file handler
+    fhandler = AutoHandler(tokenizer, col_names=col_names)
+    # Base dataloader
+    data = ScalableReader(cfg.training.dataset_path, dp_rank, dp_world_size, fhandler, delimiter_token=tokenizer.eos_id, bos_token=tokenizer.bos_id, strip_tokens=(tokenizer.bos_id, tokenizer.eos_id), n_logical_shards=cfg.dataset.num_logical_shards, seed=42)
+    # Subdata sampling
+    data = SamplingDataset(cfg.training.dataset_path, data, delimiter_token=tokenizer.eos_id, datasets=datasets, weights=weights)
+    # Packing / slicing
+    data = DocPackingDataset(data, cfg.training.seq_len + 1, n_pads=0, delimiter_token=tokenizer.eos_id, pad_token=-1, n_bins=32)
+    # Shuffling
+    data = ShuffleDataset(data, window_size=10000, seed=42)
+    # FIM
+    if cfg.dataset.psm_rate + cfg.dataset.spm_rate > 0:
+        data = FIMDataset(data, tokenizer.eos_id, cfg.dataset.psm_rate, cfg.dataset.spm_rate,
+                          pre_token=None if cfg.dataset.fim_pre == -1 else cfg.dataset.fim_pre,
+                          mid_token=None if cfg.dataset.fim_mid == -1 else cfg.dataset.fim_mid,
+                          suf_token=None if cfg.dataset.fim_suf == -1 else cfg.dataset.fim_suf,
+                          )
+    # Statelessly convert all outputs to tensors
+    data = PreprocessDataset(data, torch.tensor)
+    # Split sequence into input and target
+    data = PreprocessDataset(data, lambda x: ({"input":x[:-1]}, x[1:]))
+
+    return data
 
 
 class HuggingFaceTextDataset(IterableDataset, Stateful):
@@ -173,27 +221,19 @@ def build_text_dataloader(
     infinite: bool = True,
 ) -> ParallelAwareDataloader:
     """Build a data loader for HuggingFace datasets."""
-    dataset_name = job_config.training.dataset
-    dataset_path = job_config.training.dataset_path
-    batch_size = job_config.training.local_batch_size
-    seq_len = job_config.training.seq_len
-
-    hf_ds = HuggingFaceTextDataset(
-        dataset_name=dataset_name,
-        dataset_path=dataset_path,
+    ds = RescalableDataset(
+        job_config,
         tokenizer=tokenizer,
-        seq_len=seq_len,
         dp_rank=dp_rank,
         dp_world_size=dp_world_size,
-        infinite=infinite,
     )
-
-    return ParallelAwareDataloader(
-        dataset=hf_ds,
-        dp_rank=dp_rank,
-        dp_world_size=dp_world_size,
-        batch_size=batch_size,
-    )
+    return StatefulDataLoader(dataset=ds, batch_size=job_config.training.local_batch_size, num_workers=1)
+    # return ParallelAwareDataloader(
+    #     dataset=ds,
+    #     dp_rank=dp_rank,
+    #     dp_world_size=dp_world_size,
+    #     batch_size=batch_size,
+    # )
 
 
 def build_text_validation_dataloader(
@@ -225,3 +265,21 @@ def build_text_validation_dataloader(
         dp_world_size=dp_world_size,
         batch_size=batch_size,
     )
+
+
+def parse_data_args(datas, weights, cols):
+    # Convert csv inputs into corresponding lists of values
+    def splitstrip(x):
+        if isinstance(x, str):
+            return [item.strip() for item in x.split(",")]
+        elif isinstance(x, (list, tuple)):
+            return list(x)
+        elif isinstance(x, (int, float, complex)):
+            return [x]
+        else:
+            raise ValueError(f"arg input {x} cannot be parsed.")
+
+    datas = splitstrip(datas)
+    weights = [float(x) for x in splitstrip(weights)]
+    cols = splitstrip(cols)
+    return datas, weights, cols
