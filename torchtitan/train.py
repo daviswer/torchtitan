@@ -37,6 +37,16 @@ from torchtitan.tools.profiling import (
     maybe_enable_profiling,
 )
 
+_torch_load = torch.load
+def load_wrapper(*args, **kwargs):
+    kwargs["weights_only"] = False
+    return _torch_load(*args, **kwargs)
+torch.load = load_wrapper
+
+import sys
+import torchao
+sys.modules["torchao.float8.float8_tensor"] = torchao.float8.float8_training_tensor
+
 
 class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     # core configs
