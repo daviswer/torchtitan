@@ -462,7 +462,9 @@ class CheckpointManager:
             # TODO: Since we flatten the model states in state_dict, we need to
             # manually call load_state_dict() for the model. Need to fix this.
             if MODEL in self.states:
-                self.states[MODEL].load_state_dict(state_dict)
+                # self.states[MODEL].load_state_dict(state_dict)
+                # for ckpt saved with older torchtitan versions (non-flattened ckpt), use the following:
+                self.states[MODEL].load_state_dict(state_dict[MODEL])
 
     @torch.no_grad()
     def save(self, curr_step: int, last_step: bool = False) -> None:
@@ -741,7 +743,9 @@ class CheckpointManager:
         """
         # For the first step, we will only load the model.
         if model_only:
-            return self.states[MODEL].state_dict()
+            # return self.states[MODEL].state_dict()
+            # for ckpt saved with older torchtitan versions (non-flattened ckpt), use the following:
+            return {MODEL: self.states[MODEL].state_dict()}
 
         for exclude_key in self.exclude_from_loading:
             if exclude_key not in self.states:
