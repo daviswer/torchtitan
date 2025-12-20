@@ -31,6 +31,7 @@ from torchdata.scalable_reader import (
     ShuffleDataset,
     AutoHandler,
     FIMDataset,
+    DummyReader
 )
 from torchdata.stateful_dataloader import StatefulDataLoader
 
@@ -108,7 +109,7 @@ def RescalableDataset(
                           suf_token=None if cfg.dataset.fim_suf == -1 else cfg.dataset.fim_suf,
                           )
     # Statelessly convert all outputs to tensors
-    data = PreprocessDataset(data, torch.tensor)
+    data = PreprocessDataset(data, lambda x: torch.tensor(x, dtype=torch.int))
     # Split sequence into input and target
     data = PreprocessDataset(data, lambda x: ({"input":x[:-1]}, x[1:]))
 
