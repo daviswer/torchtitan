@@ -27,6 +27,7 @@ from torchdata.scalable_reader import (
     PreprocessDataset,
     DocPackingDataset,
     SamplingDataset,
+    ScalableHFReader,
     ScalableReader,
     ShuffleDataset,
     ParquetHandler,
@@ -88,18 +89,25 @@ def RescalableDataset(
     dp_rank: int = 0,
     dp_world_size: int = 1,
     infinite: bool = False,
+    streaming: bool = False,
 ) -> None:
-    path = snapshot_download(
-        repo_id="HuggingFaceTB/cosmopedia", 
-        repo_type="dataset", 
-        allow_patterns=["data/wikihow/*", "data/openstax/*"],
-        cache_dir=os.path.join(dataset_path, dataset_name),
-    )
-    path = os.path.join(path, "data")
-    fhandler = ParquetHandler(tokenizer)
     # TODO: hardcoded vals -> args
+    if not streaming:
+        path = snapshot_download(
+            repo_id="HuggingFaceTB/cosmopedia", 
+            repo_type="dataset", 
+            allow_patterns=["data/wikihow/*", "data/openstax/*"],
+            cache_dir=os.path.join(dataset_path, dataset_name),
+        )
+    path = os.path.join(path, "data")
+    if streaming: 
+        raw_processor = tokenizer
+        base_layer = ScalableHFReader
+    else:
+        raw_processor = ParquetHandler(tokenizer)
+        base_layer = ScalableReader
     # Base dataloader
-    data = ScalableReader(path, dp_rank, dp_world_size, fhandler, delimiter_token=0, n_logical_shards=4096, seed=42)
+    data = base_layer(path, dp_rank, dp_world_size, raw_processor, delimiter_token=0, n_logical_shards=4096, seed=42)
     # Subdata sampling
     data = SamplingDataset(path, data, delimiter_token=0, datasets=["wikihow","openstax"], weights=[3,5])
     # Packing / slicing
