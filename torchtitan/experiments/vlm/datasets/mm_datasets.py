@@ -11,6 +11,7 @@ including images and text. Images are interleaved with text at native aspect rat
 It supports both streaming and non-streaming datasets from HuggingFace.
 """
 
+from functools import partial
 from typing import Any, Callable
 
 import torch
@@ -18,6 +19,9 @@ from datasets import Dataset, load_dataset
 from datasets.distributed import split_dataset_by_node
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
+
+from torchdata.scalable_reader import ScalableTitanMMReader
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 from torchtitan.components.dataloader import ParallelAwareDataloader
 from torchtitan.components.tokenizer import BaseTokenizer, HuggingFaceTokenizer
@@ -403,7 +407,7 @@ def build_mm_dataloader(
     packing_buffer_size = job_config.data.packing_buffer_size
     special_tokens = SpecialTokens.from_tokenizer(tokenizer)
 
-    dataset = HuggingFaceMultiModalDataset(
+    hf_constructor = partial(HuggingFaceMultiModalDataset,
         dataset_name=job_config.training.dataset,
         dataset_path=dataset_path,
         tokenizer=tokenizer,
@@ -415,10 +419,26 @@ def build_mm_dataloader(
         max_images_per_batch=max_images_per_batch,
         packing_buffer_size=packing_buffer_size,
         special_tokens=special_tokens,
-        dp_rank=dp_rank,
-        dp_world_size=dp_world_size,
-        infinite=infinite,
     )
+
+    dataset = ScalableTitanMMReader(hf_constructor, dp_rank, dp_world_size)
+
+    # dataset = HuggingFaceMultiModalDataset(
+    #     dataset_name=job_config.training.dataset,
+    #     dataset_path=dataset_path,
+    #     tokenizer=tokenizer,
+    #     batch_size=batch_size,
+    #     seq_len=seq_len,
+    #     patch_size=patch_size,
+    #     spatial_merge_size=spatial_merge_size,
+    #     max_patches_per_image=max_patches_per_image,
+    #     max_images_per_batch=max_images_per_batch,
+    #     packing_buffer_size=packing_buffer_size,
+    #     special_tokens=special_tokens,
+    #     dp_rank=dp_rank,
+    #     dp_world_size=dp_world_size,
+    #     infinite=infinite,
+    # )
 
     collate_fn = MultiModalCollatorNLD(
         batch_size=batch_size,
@@ -429,12 +449,17 @@ def build_mm_dataloader(
         special_tokens=special_tokens,
     )
 
-    base_dataloader = ParallelAwareDataloader(
+    base_dataloader = StatefulDataLoader(
         dataset=dataset,
-        dp_rank=dp_rank,
-        dp_world_size=dp_world_size,
         batch_size=batch_size,
         collate_fn=collate_fn,
     )
+    # base_dataloader = ParallelAwareDataloader(
+    #     dataset=dataset,
+    #     dp_rank=dp_rank,
+    #     dp_world_size=dp_world_size,
+    #     batch_size=batch_size,
+    #     collate_fn=collate_fn,
+    # )
 
     return base_dataloader

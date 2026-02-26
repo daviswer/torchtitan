@@ -243,6 +243,7 @@ def build_text_dataloader(
         dp_world_size=dp_world_size,
         infinite=infinite,
     )
+    # TODO: expose n logical shards, seed(?)
 
     # TODO: num_workers const -> arg
     return StatefulDataLoader(dataset=ds, batch_size=batch_size, num_workers=1)
