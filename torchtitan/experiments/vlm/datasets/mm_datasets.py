@@ -421,7 +421,7 @@ def build_mm_dataloader(
         special_tokens=special_tokens,
     )
 
-    dataset = ScalableTitanMMReader(hf_constructor, dp_rank, dp_world_size)
+    dataset = ScalableTitanMMReader(hf_constructor, dp_rank, dp_world_size, n_logical_shards=16)
 
     # dataset = HuggingFaceMultiModalDataset(
     #     dataset_name=job_config.training.dataset,
@@ -453,6 +453,7 @@ def build_mm_dataloader(
         dataset=dataset,
         batch_size=batch_size,
         collate_fn=collate_fn,
+        num_workers=1,
     )
     # base_dataloader = ParallelAwareDataloader(
     #     dataset=dataset,
