@@ -473,8 +473,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             input_dict, labels
         )
 
-        if int(os.environ["LOCAL_RANK"])==0:
-            print(inputs[0], inputs[0].abs().float().mean(), inputs[0].max(), inputs[0].min())
+        if int(os.environ["LOCAL_RANK"])==2:
+            print(inputs[0], inputs[0].abs().float().mean().item(), inputs[0].max().item(), inputs[0].min().item())
 
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
