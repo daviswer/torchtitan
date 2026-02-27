@@ -472,6 +472,10 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         inputs, labels, extra_inputs, extra_kwargs = self.post_dataloading_process(
             input_dict, labels
         )
+
+        if int(os.environ["LOCAL_RANK"])==0:
+            print(inputs[0], inputs[0].abs().mean(), inputs[0].max(), inputs[0].min())
+
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
         cp_buffers = [inputs, labels]
