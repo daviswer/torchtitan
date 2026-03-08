@@ -20,7 +20,7 @@ from datasets.distributed import split_dataset_by_node
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
 
-from torchdata.scalable_reader import ScalableTitanMMReader
+from torchdata.scalable_reader import PreprocessDataset, ScalableMMReader, TitanMMPackingDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from torchtitan.components.dataloader import ParallelAwareDataloader
@@ -407,21 +407,49 @@ def build_mm_dataloader(
     packing_buffer_size = job_config.data.packing_buffer_size
     special_tokens = SpecialTokens.from_tokenizer(tokenizer)
 
-    hf_constructor = partial(HuggingFaceMultiModalDataset,
-        dataset_name=job_config.training.dataset,
-        dataset_path=dataset_path,
-        tokenizer=tokenizer,
-        batch_size=batch_size,
-        seq_len=seq_len,
-        patch_size=patch_size,
-        spatial_merge_size=spatial_merge_size,
-        max_patches_per_image=max_patches_per_image,
-        max_images_per_batch=max_images_per_batch,
-        packing_buffer_size=packing_buffer_size,
-        special_tokens=special_tokens,
+    path, dataset_loader, sample_processor = _validate_mm_dataset(
+            job_config.training.dataset.lower(), dataset_path
+        )
+    ds = dataset_loader(path)
+    dataset = ScalableMMReader(
+        ds, 
+        dp_rank, 
+        dp_world_size, 
+        n_logical_shards=16, 
+        sample_processor=lambda x: sample_processor(
+            x,
+            tokenizer=tokenizer,
+            patch_size=patch_size,
+            spatial_merge_size=spatial_merge_size,
+            max_patch_per_image=max_patches_per_image,
+            special_tokens=special_tokens,
+            max_seq_len=seq_len,
+        ),
+    )
+    dataset = TitanMMPackingDataset(
+        dataset,
+        SamplePacker(
+            max_seq_length=seq_len,
+            buffer_size=packing_buffer_size,
+            batch_size=1,
+        ),
     )
 
-    dataset = ScalableTitanMMReader(hf_constructor, dp_rank, dp_world_size, n_logical_shards=16)
+    # hf_constructor = partial(HuggingFaceMultiModalDataset,
+    #     dataset_name=job_config.training.dataset,
+    #     dataset_path=dataset_path,
+    #     tokenizer=tokenizer,
+    #     batch_size=batch_size,
+    #     seq_len=seq_len,
+    #     patch_size=patch_size,
+    #     spatial_merge_size=spatial_merge_size,
+    #     max_patches_per_image=max_patches_per_image,
+    #     max_images_per_batch=max_images_per_batch,
+    #     packing_buffer_size=packing_buffer_size,
+    #     special_tokens=special_tokens,
+    # )
+
+    # dataset = ScalableTitanMMReader(hf_constructor, dp_rank, dp_world_size, n_logical_shards=16)
 
     # dataset = HuggingFaceMultiModalDataset(
     #     dataset_name=job_config.training.dataset,
