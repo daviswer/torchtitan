@@ -426,14 +426,15 @@ def build_mm_dataloader(
             special_tokens=special_tokens,
         ),
     )
-    dataset = TitanMMPackingDataset(
-        dataset,
-        SamplePacker(
-            max_seq_length=seq_len,
-            buffer_size=packing_buffer_size,
-            batch_size=1,
-        ),
-    )
+    if packing_buffer_size > 0:
+        dataset = TitanMMPackingDataset(
+            dataset,
+            SamplePacker(
+                max_seq_length=seq_len,
+                buffer_size=packing_buffer_size,
+                batch_size=1,
+            ),
+        )
 
     # hf_constructor = partial(HuggingFaceMultiModalDataset,
     #     dataset_name=job_config.training.dataset,
