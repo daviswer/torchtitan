@@ -432,7 +432,7 @@ def build_mm_dataloader(
             SamplePacker(
                 max_seq_length=seq_len,
                 buffer_size=packing_buffer_size,
-                batch_size=1,
+                batch_size=batch_size,
             ),
         )
 
