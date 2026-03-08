@@ -412,10 +412,11 @@ def build_mm_dataloader(
         )
     ds = dataset_loader(path)
     dataset = ScalableMMReader(
-        ds, 
-        dp_rank, 
-        dp_world_size, 
-        n_logical_shards=16, 
+        ds,
+        dp_rank,
+        dp_world_size,
+        n_logical_shards=16,
+        max_seq_len=seq_len,
         sample_processor=lambda x: sample_processor(
             x,
             tokenizer=tokenizer,
@@ -423,7 +424,6 @@ def build_mm_dataloader(
             spatial_merge_size=spatial_merge_size,
             max_patch_per_image=max_patches_per_image,
             special_tokens=special_tokens,
-            max_seq_len=seq_len,
         ),
     )
     dataset = TitanMMPackingDataset(
