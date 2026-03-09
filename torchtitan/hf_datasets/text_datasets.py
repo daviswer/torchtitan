@@ -173,7 +173,11 @@ def RescalableDataset(
     # Shuffling
     data = ShuffleDataset(data, window_size=1000, seed=42)
     # Statelessly convert all outputs to tensors
-    data = PreprocessDataset(data, torch.tensor)
+    def tensorfy_indices(x):
+        for i,v in enumerate(x):
+            assert int(v)==v, f"Non-integer index value {v} found in slot {i}: {x}"
+        return torch.tensor(x)
+    data = PreprocessDataset(data, tensorfy_indices)
     # Split sequence into input and target
     data = PreprocessDataset(data, lambda x: ({"input":x[:-1]}, x[1:]))
     
