@@ -415,7 +415,7 @@ def build_mm_dataloader(
         ds,
         dp_rank,
         dp_world_size,
-        n_logical_shards=16,
+        n_logical_shards=32,
         max_seq_len=seq_len,
         sample_processor=lambda x: sample_processor(
             x,
@@ -432,7 +432,7 @@ def build_mm_dataloader(
             SamplePacker(
                 max_seq_length=seq_len,
                 buffer_size=packing_buffer_size,
-                batch_size=batch_size,
+                batch_size=batch_size//2,
             ),
         )
 
@@ -482,7 +482,7 @@ def build_mm_dataloader(
         dataset=dataset,
         batch_size=batch_size,
         collate_fn=collate_fn,
-        num_workers=1,
+        num_workers=2,
     )
     # base_dataloader = ParallelAwareDataloader(
     #     dataset=dataset,
