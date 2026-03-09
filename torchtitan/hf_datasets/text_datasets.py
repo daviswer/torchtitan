@@ -29,6 +29,7 @@ from torchdata.scalable_reader import (
     SamplingDataset,
     ScalableHFReader,
     ScalableReader,
+    ScalableMMReader,
     ShuffleDataset,
     ParquetHandler,
 )
@@ -101,13 +102,70 @@ def RescalableDataset(
         )
     path = os.path.join(path, "data")
     if streaming: 
-        raw_processor = tokenizer
-        base_layer = ScalableHFReader
+        path, dataset_loader, text_processor = _validate_dataset(
+            dataset_name.lower(), dataset_path
+        )
+        ds = dataset_loader(path)
+        
+        def _process_doc(data, col_names, tokenizer, delimiter_token, bos=None, drop=set(), text_processor=lambda x:x):
+            """
+            Tokenize doc and handle bos/eos
+            """
+            # Add bos/eos to droplist
+            eos = delimiter_token
+            drop.add(eos)
+            if bos is not None:
+                drop.add(bos)
+            # Pull out relevant text field
+            doc = None
+            for name in col_names:
+                if name in data.keys():
+                    doc = data[name]
+                    break
+            assert (
+                doc is not None
+            ), f"None of column names {col_names} found in file headers {data.keys()}"
+            # Tokenize
+            doc = tokenizer.encode(text_processor(doc))
+            # Truncate first token if needed
+            if len(doc) > 0 and doc[0] in drop:
+                doc = doc[1:]
+            # Recheck len for edge case where doc=[eos]
+            if len(doc) > 0 and doc[-1] in drop:
+                doc = doc[:-1]
+            # Add bos/eos tokens
+            if bos is not None:
+                doc = [bos] + doc
+            doc = doc + [eos]
+            return doc
+
+        # Base dataloader
+        data = ScalableMMReader(
+            ds,
+            dp_rank,
+            dp_world_size,
+            n_logical_shards=4096,
+            sample_processor = lambda x: _process_doc(
+                x,
+                col_names=["text", "contents", "tokens"],
+                tokenizer=tokenizer,
+                delimiter_token=0,
+                text_processor=text_processor,
+            ),
+            seed=42,
+        )
     else:
-        raw_processor = ParquetHandler(tokenizer)
-        base_layer = ScalableReader
-    # Base dataloader
-    data = base_layer(path, dp_rank, dp_world_size, raw_processor, delimiter_token=0, n_logical_shards=4096, seed=42)
+        # Base dataloader
+        data = ScalableReader(
+            path, 
+            dp_rank, 
+            dp_world_size, 
+            ParquetHandler(tokenizer), 
+            delimiter_token=0, 
+            n_logical_shards=4096, 
+            seed=42,
+        )
+    
     # Subdata sampling
     data = SamplingDataset(path, data, delimiter_token=0, datasets=["wikihow","openstax"], weights=[3,5])
     # Packing / slicing
@@ -246,7 +304,7 @@ def build_text_dataloader(
     # TODO: expose n logical shards, seed(?)
 
     # TODO: num_workers const -> arg
-    return StatefulDataLoader(dataset=ds, batch_size=batch_size, num_workers=1)
+    return StatefulDataLoader(dataset=ds, batch_size=batch_size, num_workers=2)
     # return ParallelAwareDataloader(
     #     dataset=ds,
     #     dp_rank=dp_rank,
