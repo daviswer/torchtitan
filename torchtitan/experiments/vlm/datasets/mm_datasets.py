@@ -410,7 +410,6 @@ def build_mm_dataloader(
     path, dataset_loader, sample_processor = _validate_mm_dataset(
             job_config.training.dataset.lower(), dataset_path
         )
-    ds = dataset_loader(path)
     def process_and_check(x):
         out = sample_processor(
             x,
@@ -420,19 +419,20 @@ def build_mm_dataloader(
             max_patch_per_image=max_patches_per_image,
             special_tokens=special_tokens,
         )
-        if out["input_ids"].shape[0] > self.max_seq_len:
+        if out["input_ids"].shape[0] > seq_len:
             print(
                 f"Rank {dp_rank}: Sample length {out['input_ids'].shape[0]} > training {seq_len}. Skip"
             )
             return None
         return out
     dataset = ScalableMMReader(
-        ds,
+        path,
         dp_rank,
         dp_world_size,
         n_logical_shards=32,
         max_seq_len=seq_len,
-        sample_processor=process_and_check, 
+        sample_processor=process_and_check,
+        hf_constructor=dataset_loader,
     )
     if packing_buffer_size > 0:
         dataset = TitanMMPackingDataset(
