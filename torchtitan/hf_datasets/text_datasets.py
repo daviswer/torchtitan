@@ -65,7 +65,7 @@ DATASETS = {
     ),
     "cosmopedia": DatasetConfig(
         path="HuggingFaceTB/cosmopedia",
-        loader = lambda path, name: load_dataset(path, name=name, split="train", streaming=True),
+        loader = lambda path: load_dataset(path, split="train", streaming=True),
         sample_processor=_process_c4_text,
     )
 }
