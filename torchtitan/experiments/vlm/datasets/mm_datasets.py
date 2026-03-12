@@ -429,7 +429,7 @@ def build_mm_dataloader(
         path,
         dp_rank,
         dp_world_size,
-        n_logical_shards=32,
+        n_logical_shards=4096,
         max_seq_len=seq_len,
         sample_processor=process_and_check,
         hf_constructor=dataset_loader,

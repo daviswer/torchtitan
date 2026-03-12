@@ -98,6 +98,12 @@ def RescalableDataset(
     streaming: bool = False,
 ) -> None:
     # TODO: hardcoded vals -> args
+    base_kwargs = {
+        "seed": 42,
+        "n_logical_shards": 4096,
+        "rank": dp_rank,
+        "worldsize": dp_world_size,
+    }
     if streaming:
         path, dataset_loader, text_processor = _validate_dataset(
             dataset_name.lower(), dataset_path
@@ -129,18 +135,15 @@ def RescalableDataset(
         # Base dataloader
         data = ScalableMMReader(
             path,
-            dp_rank,
-            dp_world_size,
-            n_logical_shards=4096,
             sample_processor = lambda x: _process_doc(
                 x,
                 tokenizer=tokenizer,
                 delimiter_token=0,
                 text_processor=text_processor,
             ),
-            seed=42,
             hf_constructor=dataset_loader,
             split_path_to_name=True,
+            **base_kwargs,
         )
     else:
         path = snapshot_download(
@@ -152,13 +155,10 @@ def RescalableDataset(
         path = os.path.join(path, "data")
         # Base dataloader
         data = ScalableReader(
-            path, 
-            dp_rank, 
-            dp_world_size, 
-            ParquetHandler(tokenizer), 
+            path,
+            filehandler=ParquetHandler(tokenizer), 
             delimiter_token=0, 
-            n_logical_shards=4096, 
-            seed=42,
+            **base_kwargs,
         )
     
     # Subdata sampling
