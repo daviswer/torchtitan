@@ -140,6 +140,7 @@ def RescalableDataset(
             ),
             seed=42,
             hf_constructor=dataset_loader,
+            split_path_to_name=True,
         )
     else:
         path = snapshot_download(
