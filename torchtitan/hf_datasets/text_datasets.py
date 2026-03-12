@@ -29,7 +29,6 @@ from torchdata.scalable_reader import (
     SamplingDataset,
     ScalableHFReader,
     ScalableReader,
-    ScalableMMReader,
     ShuffleDataset,
     ParquetHandler,
 )
@@ -133,7 +132,7 @@ def RescalableDataset(
             return doc
 
         # Base dataloader
-        data = ScalableMMReader(
+        data = ScalableHFReader(
             path,
             sample_processor = lambda x: _process_doc(
                 x,

@@ -20,7 +20,7 @@ from datasets.distributed import split_dataset_by_node
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
 
-from torchdata.scalable_reader import PreprocessDataset, ScalableMMReader, TitanMMPackingDataset
+from torchdata.scalable_reader import ScalableHFReader, TitanMMPackingDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from torchtitan.components.dataloader import ParallelAwareDataloader
@@ -425,7 +425,7 @@ def build_mm_dataloader(
             )
             return None
         return out
-    dataset = ScalableMMReader(
+    dataset = ScalableHFReader(
         path,
         dp_rank,
         dp_world_size,
@@ -443,22 +443,6 @@ def build_mm_dataloader(
                 batch_size=batch_size//2,
             ),
         )
-
-    # hf_constructor = partial(HuggingFaceMultiModalDataset,
-    #     dataset_name=job_config.training.dataset,
-    #     dataset_path=dataset_path,
-    #     tokenizer=tokenizer,
-    #     batch_size=batch_size,
-    #     seq_len=seq_len,
-    #     patch_size=patch_size,
-    #     spatial_merge_size=spatial_merge_size,
-    #     max_patches_per_image=max_patches_per_image,
-    #     max_images_per_batch=max_images_per_batch,
-    #     packing_buffer_size=packing_buffer_size,
-    #     special_tokens=special_tokens,
-    # )
-
-    # dataset = ScalableTitanMMReader(hf_constructor, dp_rank, dp_world_size, n_logical_shards=16)
 
     # dataset = HuggingFaceMultiModalDataset(
     #     dataset_name=job_config.training.dataset,
