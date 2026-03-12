@@ -295,7 +295,7 @@ def build_text_dataloader(
         dp_rank=dp_rank,
         dp_world_size=dp_world_size,
         infinite=infinite,
-        streaming=True,
+        streaming=False,
     )
     # TODO: expose n logical shards, seed(?)
 
