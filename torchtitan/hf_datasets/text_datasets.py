@@ -63,6 +63,11 @@ DATASETS = {
         loader=partial(_load_c4_dataset, split="validation"),
         sample_processor=_process_c4_text,
     ),
+    "cosmopedia": DatasetConfig(
+        path="HuggingFaceTB/cosmopedia",
+        loader = lambda path, name: load_dataset(path, name=name, split="train", streaming=True),
+        sample_processor=_process_c4_text,
+    )
 }
 
 
@@ -93,21 +98,12 @@ def RescalableDataset(
     streaming: bool = False,
 ) -> None:
     # TODO: hardcoded vals -> args
-    if not streaming:
-        path = snapshot_download(
-            repo_id="HuggingFaceTB/cosmopedia", 
-            repo_type="dataset", 
-            allow_patterns=["data/wikihow/*", "data/openstax/*"],
-            cache_dir=os.path.join(dataset_path, dataset_name),
-        )
-    path = os.path.join(path, "data")
-    if streaming: 
+    if streaming:
         path, dataset_loader, text_processor = _validate_dataset(
             dataset_name.lower(), dataset_path
         )
-        ds = dataset_loader(path)
         
-        def _process_doc(data, col_names, tokenizer, delimiter_token, bos=None, drop=set(), text_processor=lambda x:x):
+        def _process_doc(data, tokenizer, delimiter_token, bos=None, drop=set(), text_processor=lambda x:x):
             """
             Tokenize doc and handle bos/eos
             """
@@ -116,17 +112,8 @@ def RescalableDataset(
             drop.add(eos)
             if bos is not None:
                 drop.add(bos)
-            # Pull out relevant text field
-            doc = None
-            for name in col_names:
-                if name in data.keys():
-                    doc = data[name]
-                    break
-            assert (
-                doc is not None
-            ), f"None of column names {col_names} found in file headers {data.keys()}"
             # Tokenize
-            doc = tokenizer.encode(text_processor(doc))
+            doc = tokenizer.encode(text_processor(data))
             # Truncate first token if needed
             if len(doc) > 0 and doc[0] in drop:
                 doc = doc[1:]
@@ -141,20 +128,27 @@ def RescalableDataset(
 
         # Base dataloader
         data = ScalableMMReader(
-            ds,
+            path,
             dp_rank,
             dp_world_size,
             n_logical_shards=4096,
             sample_processor = lambda x: _process_doc(
                 x,
-                col_names=["text", "contents", "tokens"],
                 tokenizer=tokenizer,
                 delimiter_token=0,
                 text_processor=text_processor,
             ),
             seed=42,
+            hf_constructor=dataset_loader,
         )
     else:
+        path = snapshot_download(
+            repo_id="HuggingFaceTB/cosmopedia", 
+            repo_type="dataset", 
+            allow_patterns=["data/wikihow/*", "data/openstax/*"],
+            cache_dir=os.path.join(dataset_path, dataset_name),
+        )
+        path = os.path.join(path, "data")
         # Base dataloader
         data = ScalableReader(
             path, 
@@ -300,6 +294,7 @@ def build_text_dataloader(
         dp_rank=dp_rank,
         dp_world_size=dp_world_size,
         infinite=infinite,
+        streaming=True,
     )
     # TODO: expose n logical shards, seed(?)
 
