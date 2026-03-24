@@ -478,10 +478,12 @@ def build_mm_dataloader(
 
     # collate_fn returns a dict and a label, while DictShuffle needs just the dict.
     # Stick label into dict and pull it back out later
+    # Also remove non-tensor special tokens and put them back later
     def labelpack(x):
         d = x[0]
         l = x[1]
         d["label"] = l
+        d.pop("special_tokens")
         return d
     dataset = PreprocessDataset(
         dataset,
@@ -495,9 +497,10 @@ def build_mm_dataloader(
         n_data_fields = 5,
     )
 
-    # Pull label back out of dict
+    # Pull label back out of dict, put special tokens back in
     def labelput(d):
         l = d.pop("label")
+        d["special_tokens"] = SpecialTokens
         return d,l
     dataset = PreprocessDataset(
         dataset,
