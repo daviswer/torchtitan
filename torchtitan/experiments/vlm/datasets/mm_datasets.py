@@ -494,7 +494,7 @@ def build_mm_dataloader(
         dataset,
         window_size = 100,
         seed = 42,
-        n_data_fields = 5,
+        n_data_fields = 4,
     )
 
     # Pull label back out of dict, put special tokens back in
