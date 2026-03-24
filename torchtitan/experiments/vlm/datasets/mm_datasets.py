@@ -500,7 +500,7 @@ def build_mm_dataloader(
     # Pull label back out of dict, put special tokens back in
     def labelput(d):
         l = d.pop("label")
-        d["special_tokens"] = SpecialTokens
+        d["special_tokens"] = collate_fn.special_tokens
         return d,l
     dataset = PreprocessDataset(
         dataset,
