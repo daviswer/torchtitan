@@ -474,7 +474,7 @@ def build_mm_dataloader(
         dataset=dataset,
         batch_size=batch_size,
         collate_fn=collate_fn,
-        num_workers=2,
+        num_workers=1,
     )
     # base_dataloader = ParallelAwareDataloader(
     #     dataset=dataset,
