@@ -299,7 +299,7 @@ def build_text_dataloader(
     # TODO: expose n logical shards, seed(?)
 
     # TODO: num_workers const -> arg
-    return StatefulDataLoader(dataset=ds, batch_size=batch_size, num_workers=1)
+    return StatefulDataLoader(dataset=ds, batch_size=batch_size, num_workers=2)
     # return ParallelAwareDataloader(
     #     dataset=ds,
     #     dp_rank=dp_rank,

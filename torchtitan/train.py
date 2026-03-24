@@ -307,6 +307,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             ft_manager=self.ft_manager,
             rescaling_mesh=self.parallel_dims.world_mesh, # TODO: hardcode -> arg (None default), test with cp/pp/tp
         )
+        # TODO: put rescaling_mesh onto cpu, see if that fixes float-casting issue in reshard vars
 
         loss_parallel_enabled = (
             parallel_dims.tp_enabled
