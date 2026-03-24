@@ -20,7 +20,7 @@ from datasets.distributed import split_dataset_by_node
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
 
-from torchdata.scalable_reader import ScalableHFReader, TitanMMPackingDataset
+from torchdata.scalable_reader import ScalableHFReader, CollateDataset, DictShuffleDataset, PreprocessDataset, TitanMMPackingDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from torchtitan.components.dataloader import ParallelAwareDataloader
@@ -470,12 +470,52 @@ def build_mm_dataloader(
         special_tokens=special_tokens,
     )
 
-    base_dataloader = StatefulDataLoader(
-        dataset=dataset,
-        batch_size=batch_size,
-        collate_fn=collate_fn,
-        num_workers=1,
+    dataset = CollateDataset(
+        dataset,
+        collate_fn,
+        batch_size,
     )
+
+    # collate_fn returns a dict and a label, while DictShuffle needs just the dict.
+    # Stick label into dict and pull it back out later
+    def labelpack(x):
+        d = x[0]
+        l = x[1]
+        d["label"] = l
+        return d
+    dataset = PreprocessDataset(
+        dataset,
+        labelpack,
+    )
+
+    dataset = DictShuffleDataset(
+        dataset,
+        window_size = 100,
+        seed = 42,
+        n_data_fields = 5,
+    )
+
+    # Pull label back out of dict
+    def labelput(d):
+        l = d.pop("label")
+        return d,l
+    dataset = PreprocessDataset(
+        dataset,
+        labelput,
+    )
+
+    base_dataloader = StatefulDataLoader(
+        dataset = dataset,
+        batch_size = 1,
+        collate_fn = lambda x:x[0],  # Prevent axis inflation
+        num_workers = 1,
+    )
+    # base_dataloader = StatefulDataLoader(
+    #     dataset=dataset,
+    #     batch_size=batch_size,
+    #     collate_fn=collate_fn,
+    #     num_workers=1,
+    # )
     # base_dataloader = ParallelAwareDataloader(
     #     dataset=dataset,
     #     dp_rank=dp_rank,
