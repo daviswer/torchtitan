@@ -305,8 +305,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             ),
             base_folder=job_config.job.dump_folder,
             ft_manager=self.ft_manager,
-            # rescaling_mesh=init_device_mesh("cpu", [dp_degree]),
-            rescaling_mesh=self.parallel_dims.world_mesh, # TODO: hardcode -> arg (None default), test with cp/pp/tp
+            rescaling_mesh=init_device_mesh("cpu", [dp_degree]),
+            # rescaling_mesh=self.parallel_dims.world_mesh, # TODO: hardcode -> arg (None default), test with cp/pp/tp
         )
 
         loss_parallel_enabled = (
