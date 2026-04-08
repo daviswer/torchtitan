@@ -200,6 +200,7 @@ MM_DATASETS = {
     ),
     "cc12m": DatasetConfig(
         path="pixparse/cc12m-wds",
+        # path="/gpfs/davis/temp_data/"
         loader=lambda path: load_dataset(path, split="train", streaming=True),
         sample_processor=_process_cc12_wd_sample,
     ),
