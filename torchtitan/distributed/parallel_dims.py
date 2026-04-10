@@ -63,16 +63,16 @@ class ParallelDims:
                 # EP would borrow all cp and tp and some dp_shard degree
                 assert ep % (cp * tp) == 0 and (dp_shard * cp * tp) % ep == 0
 
-    def build_mesh(self) -> DeviceMesh:
+    def build_mesh(self, device=None) -> DeviceMesh:
         # TODO: Current implementation of ParallelDims for dp2ep Expert Parallel
         #       is not very clean, due to the limited support from DeviceMesh
         #       for creating two staggered meshes. Will improve.
         if self.ep > 1:
-            return self._build_mesh_with_ep()
+            return self._build_mesh_with_ep(device)
         else:
-            return self._build_mesh_without_ep()
+            return self._build_mesh_without_ep(device)
 
-    def _build_mesh_with_ep(self) -> DeviceMesh:
+    def _build_mesh_with_ep(self, device) -> DeviceMesh:
         # With ep, dp_shard and ep are derived submeshes:
         # dp_shard = dp_shard_mod_ep * dp_shard_in_ep
         if self.etp == self.tp:
@@ -105,7 +105,7 @@ class ParallelDims:
                 names.append(name)
 
         logger.info(f"Building {len(dims)}-D device mesh with {names}, {dims}")
-        mesh = init_device_mesh(device_type, dims, mesh_dim_names=names)
+        mesh = init_device_mesh(device or device_type, dims, mesh_dim_names=names)
 
         # Create all the submesh here to ensure all required process groups are
         # initialized:
@@ -144,7 +144,7 @@ class ParallelDims:
 
         return mesh
 
-    def _build_mesh_without_ep(self) -> DeviceMesh:
+    def _build_mesh_without_ep(self, device) -> DeviceMesh:
         dims = []
         names = []
         for d, name in zip(
@@ -156,7 +156,7 @@ class ParallelDims:
                 names.append(name)
 
         logger.info(f"Building {len(dims)}-D device mesh with {names}, {dims}")
-        mesh = init_device_mesh(device_type, dims, mesh_dim_names=names)
+        mesh = init_device_mesh(device or device_type, dims, mesh_dim_names=names)
 
         # Create all the submesh here to ensure all required process groups are
         # initialized:
