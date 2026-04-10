@@ -508,15 +508,6 @@ def build_mm_dataloader(
         labelput,
     )
 
-    def diag(x):
-        if dp_rank==6:
-            print(x)
-        return x
-    dataset = PreprocessDataset(
-        dataset,
-        diag,
-    )
-
     base_dataloader = StatefulDataLoader(
         dataset = dataset,
         batch_size = 1,
