@@ -493,7 +493,7 @@ def build_mm_dataloader(
 
     dataset = DictShuffleDataset(
         dataset,
-        window_size = 2,
+        window_size = 4,
         seed = 42,
         n_data_fields = 4,
     )
