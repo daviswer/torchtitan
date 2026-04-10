@@ -199,8 +199,8 @@ MM_DATASETS = {
         sample_processor=_process_obelics_sample,
     ),
     "cc12m": DatasetConfig(
-        # path="pixparse/cc12m-wds",
-        path="/gpfs/davis/temp_data/cc12m/datasets--pixparse--cc12m-wds/snapshots/796118f2eabdb9984f23f7f15d1e74d388612fc6",
+        path="pixparse/cc12m-wds",
+        # path="/gpfs/davis/temp_data/cc12m/datasets--pixparse--cc12m-wds/snapshots/796118f2eabdb9984f23f7f15d1e74d388612fc6",
         loader=lambda path: load_dataset(path, split="train", streaming=True),
         sample_processor=_process_cc12_wd_sample,
     ),
@@ -493,7 +493,7 @@ def build_mm_dataloader(
 
     dataset = DictShuffleDataset(
         dataset,
-        window_size = 6,
+        window_size = 100,
         seed = 42,
         n_data_fields = 4,
     )
