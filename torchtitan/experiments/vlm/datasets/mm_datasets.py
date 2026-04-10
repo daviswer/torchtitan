@@ -477,36 +477,36 @@ def build_mm_dataloader(
         batch_size,
     )
 
-    # collate_fn returns a dict and a label, while DictShuffle needs just the dict.
-    # Stick label into dict and pull it back out later
-    # Also remove non-tensor special tokens and put them back later
-    def labelpack(x):
-        d = x[0]
-        l = x[1]
-        d["label"] = l
-        d.pop("special_tokens")
-        return d
-    dataset = PreprocessDataset(
-        dataset,
-        labelpack,
-    )
+    # # collate_fn returns a dict and a label, while DictShuffle needs just the dict.
+    # # Stick label into dict and pull it back out later
+    # # Also remove non-tensor special tokens and put them back later
+    # def labelpack(x):
+    #     d = x[0]
+    #     l = x[1]
+    #     d["label"] = l
+    #     d.pop("special_tokens")
+    #     return d
+    # dataset = PreprocessDataset(
+    #     dataset,
+    #     labelpack,
+    # )
 
-    dataset = DictShuffleDataset(
-        dataset,
-        window_size = 100,
-        seed = 42,
-        n_data_fields = 4,
-    )
+    # dataset = DictShuffleDataset(
+    #     dataset,
+    #     window_size = 100,
+    #     seed = 42,
+    #     n_data_fields = 4,
+    # )
 
-    # Pull label back out of dict, put special tokens back in
-    def labelput(d):
-        l = d.pop("label")
-        d["special_tokens"] = collate_fn.special_tokens
-        return d,l
-    dataset = PreprocessDataset(
-        dataset,
-        labelput,
-    )
+    # # Pull label back out of dict, put special tokens back in
+    # def labelput(d):
+    #     l = d.pop("label")
+    #     d["special_tokens"] = collate_fn.special_tokens
+    #     return d,l
+    # dataset = PreprocessDataset(
+    #     dataset,
+    #     labelput,
+    # )
 
     base_dataloader = StatefulDataLoader(
         dataset = dataset,
